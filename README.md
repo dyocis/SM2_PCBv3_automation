@@ -1,9 +1,6 @@
 # SM2 PCB v3 automation
 
-Klipper automation and a live Moonraker dashboard for the Nevermore StealthMax V2 using Isik's Tech PCB v3, two BME280 + SGP40 sensor modules, a tachometer fan, UV output, Peltier cooling, servo vent, and addressable status LEDs.
-
-> [!NOTE]
-> **Current stable code:** `main` provides the `v0.1.0` automation with repository-maintenance fixes. It still requires the UV LEDs, Peltier cooler, and exhaust servo. Optional-hardware support is unreleased on [`develop`](https://github.com/dyocis/SM2_PCBv3_automation/tree/develop) and is planned for `v0.2.0` after hardware testing.
+Klipper automation and a live Moonraker dashboard for the Nevermore StealthMax V2 using Isik's Tech PCB v3, two BME280 + SGP40 sensor modules, a tachometer fan, and addressable status LEDs. UV lights, the exhaust vent servo, and Peltier cooling are optional and selected during installation.
 
 > [!IMPORTANT]
 > This is a personal, best-effort project. I intend to continue improving the public files when I can, but I cannot promise ongoing support or a regular update schedule. You are responsible for your own printer, wiring, configuration, safety checks, and any software you install. This project is provided as-is, without warranty; I accept no responsibility for damage, failed prints, downtime, injury, or other issues arising from its installation or use.
@@ -25,7 +22,8 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 - Dual synchronized SGP40 VOC readings with BME280 compensation
 - Material profiles for ABS, ASA, composites, PETG, PLA, TPU, nylon, PPS, PPA, and PC
 - Print filtration, adaptive post-print purge, VOC thresholds, and chamber cooling
-- Interlocks for airflow, vent position, Peltier cooldown, UV, PCB temperature, and MCU temperature
+- Capability-aware support for filter-only installations and optional UV, exhaust-servo, and Peltier hardware
+- Interlocks for airflow, vent position, Peltier cooldown, UV, PCB temperature, and MCU temperature when the related hardware is installed
 - Guarded 24-hour SGP40 clean-air calibration workflow
 - LED status effects through `klipper-led_effect`
 - Standalone live dashboard for Mainsail or Fluidd installations
@@ -34,9 +32,6 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, helper macros, directory names, MCU serial, or saved-variable file. Per-printer values live in one local file that is excluded by `.gitignore`.
 
 ## Requirements
-
-> [!CAUTION]
-> **The current `v0.1.0` configuration assumes the Peltier cooler, UV LEDs, and exhaust servo are all installed. If any of these add-ons are missing, do not install the current stable version.** Optional-hardware support is planned for `v0.2.0`; the development branch is not a release.
 
 - A Linux Klipper host such as Raspberry Pi OS, MainsailOS, or a KIAUH installation
 - Klipper, Moonraker, Git, Python 3, and `sudo`
@@ -61,13 +56,11 @@ First follow Isik's [official firmware and Klipper-config procedure](https://doc
 
 This separates firmware, wiring, connector, sensor, and hardware faults from automation problems. Back up that working configuration. Then comment out or remove its `[include ...SM3.cfg]` line before installing this package. Do **not** load the official test config and this package at the same time; both define the same MCU, sensors, and outputs, so Klipper will report duplicate sections.
 
-## Quick install
+## Installation
 
 SSH to the printer host as the normal Klipper user. Do **not** switch to root.
 
-The command below installs the stable `main` branch. It does not install the unreleased `develop` branch.
-
-Review the [installer source](https://github.com/dyocis/SM2_PCBv3_automation/blob/main/scripts/install.sh), then run:
+Review the [`main` installer source](https://github.com/dyocis/SM2_PCBv3_automation/blob/main/scripts/install.sh), then run:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/dyocis/SM2_PCBv3_automation/main/scripts/install.sh)"
@@ -79,13 +72,34 @@ After the official configuration passes those tests and its include is disabled,
 2. Clone this repository to `~/SM2_PCBv3_automation`.
 3. Offer to install missing `klipper-sgp40` and `klipper-led_effect` dependencies from their official repositories.
 4. Ask for the PCB v3 USB serial path or CAN UUID.
-5. Create a private local hardware file and link the shared configuration files.
-6. Add `[include SM2_PCBv3.cfg]` to the detected `printer.cfg`.
-7. Register this repository with Moonraker's update manager.
-8. Install the dashboard on port `7131` when Nginx is available.
-9. Add a Mainsail navigation link when Mainsail is detected.
+5. Ask which optional UV, exhaust-servo, and Peltier hardware is installed.
+6. Create a private local hardware file containing only the selected hardware blocks and link the shared configuration files.
+7. Add `[include SM2_PCBv3.cfg]` to the detected `printer.cfg`.
+8. Register this repository with Moonraker's update manager.
+9. Install the dashboard on port `7131` when Nginx is available.
+10. Add a Mainsail navigation link when Mainsail is detected.
 
 Existing local hardware settings are preserved when the installer is run again. Backups named `printer.cfg.before-sm2-install` and `moonraker.conf.before-sm2-install` are created before their first modification.
+
+## Optional hardware selection
+
+The filter fan, tachometer, PCB/MCU temperature inputs, two BME280 modules, and two SGP40 modules are part of the base configuration. The installer enables these additional blocks only when selected:
+
+| Option | Interactive installer | Non-interactive flag | Dependency |
+|---|---|---|---|
+| UV lights | Independent yes/no prompt | `--with-uv` | Requires verified filter airflow while active |
+| Exhaust vent servo | Independent yes/no prompt | `--with-vent-servo` | None |
+| Peltier cooling | Advanced/beta yes/no prompt | `--with-peltier` | Automatically enables and requires the exhaust vent servo |
+
+Unselected hardware is not defined in Klipper. Its macros become safe no-ops, automatic control does not wait for it, and the dashboard reports **NOT INSTALLED** instead of **OFF**. `NEVERMORE_STATUS` prints the detected capability set after `FIRMWARE_RESTART`.
+
+> [!WARNING]
+> Peltier support is an advanced beta feature. I do not currently have the Peltier hot-side/cold-side thermistors installed on the development machine, so this release does **not** configure or monitor those thermistors. Thermistor-based Peltier monitoring and protection are planned for a future release. The current airflow, fan-RPM, vent-position, PCB-temperature, MCU-temperature, and cooldown interlocks do not replace direct Peltier thermal monitoring.
+
+The installer will not create a Peltier configuration without also enabling the servo. A manually edited configuration containing `[output_pin peltier]` without `[servo SM_Vent]` is an unsupported combination; startup detection sets a Nevermore fault and refuses Peltier operation.
+
+> [!NOTE]
+> If you installed an earlier development copy from `main`, your preserved `SM2_Local_Hardware.cfg` may still define all three optional sections. The installer will not rewrite that private file. Before restarting Klipper, comment or remove any `[servo SM_Vent]`, `[output_pin uv]`, or `[output_pin peltier]` section that does not match hardware physically installed on that machine.
 
 ### Custom layout examples
 
@@ -120,6 +134,25 @@ Non-interactive USB example:
   --mcu-serial /dev/serial/by-id/REPLACE_WITH_YOUR_PCB_SERIAL
 ```
 
+With UV and the exhaust servo:
+
+```bash
+~/SM2_PCBv3_automation/scripts/install.sh --yes \
+  --mcu-serial /dev/serial/by-id/REPLACE_WITH_YOUR_PCB_SERIAL \
+  --with-uv \
+  --with-vent-servo
+```
+
+Advanced/beta Peltier example (`--with-peltier` also enables the servo):
+
+```bash
+~/SM2_PCBv3_automation/scripts/install.sh --yes \
+  --mcu-serial /dev/serial/by-id/REPLACE_WITH_YOUR_PCB_SERIAL \
+  --with-peltier
+```
+
+With `--yes`, omitted optional-hardware flags default to not installed. Optional-hardware flags apply only when the local hardware file is first created; later installer runs preserve that file. To add or remove hardware afterward, edit `SM2_Local_Hardware.cfg` while the printer is powered down and follow the attended test sequence again.
+
 CAN example:
 
 ```bash
@@ -143,13 +176,14 @@ Verify all of the following against the official PCB v3 documentation and your m
 - Intake/exhaust sensor assignment (`I2C1` and `I2C2`)
 - Installed addressable LED count (`chain_count`; Isik's reference config uses 16)
 - Fan PWM and tachometer pins and `tachometer_ppr`
-- Servo pin, open angle, and closed angle
-- UV, Peltier, PCB thermistor, and LED pins
+- Servo pin, open angle, and closed angle, if the servo block is enabled
+- UV and Peltier pins, if those blocks are enabled
+- PCB thermistor and LED pins
 - Minimum safe fan RPM
 - PCB and MCU maximum temperatures
 - Peltier cooldown time
 
-The supplied PCB v3 pin map is a starting point, not permission to skip verification. Test each output with the printer attended. Keep the Peltier and UV disconnected until fan RPM, vent direction, and emergency shutdown behavior have been confirmed.
+The supplied PCB v3 pin map is a starting point, not permission to skip verification. Test each installed output with the printer attended. Keep the Peltier and UV disconnected until fan RPM, vent direction, and emergency shutdown behavior have been confirmed. Do not treat the current Peltier beta support as thermistor-protected.
 
 Then run in the Mainsail/Fluidd console:
 
@@ -239,7 +273,7 @@ If the console tells you to run `FIRMWARE_RESTART`, do that before acknowledging
 
 ## Updates and rollback
 
-This installer registers a `stable` Git repository updater with Moonraker. After the first tagged release, updates appear in the Mainsail or Fluidd update manager. Shared configuration and dashboard files update from Git; `SM2_Local_Hardware.cfg` and saved calibration state stay local.
+The installer registers a `stable` Git repository updater with Moonraker. Shared configuration and dashboard files update from tagged releases; `SM2_Local_Hardware.cfg`, its optional-hardware selections, and saved calibration state stay local.
 
 Before every update:
 
@@ -249,13 +283,15 @@ Before every update:
 4. Apply the update from Mainsail/Fluidd.
 5. Check `FIRMWARE_RESTART`, `NEVERMORE_STATUS`, and the individual outputs while attended.
 
-For rollback, open the repository in Moonraker's update manager and use its rollback/recover controls when offered, or use Git from SSH:
+To pin this release, or to return to it after a later update, open the repository in Moonraker's update manager and use its rollback/recover controls when offered, or use Git from SSH:
 
 ```bash
 cd ~/SM2_PCBv3_automation
 git fetch --tags
-git checkout v0.1.0
+git checkout v0.2.0
 ```
+
+The earlier `v0.1.0` release should be used only on machines with the UV LEDs, Peltier cooler, and exhaust servo all installed.
 
 Return to current stable releases with:
 

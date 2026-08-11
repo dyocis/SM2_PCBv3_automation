@@ -8,8 +8,8 @@ This remains a personal, best-effort project. A clean workflow makes updates saf
 
 | Ref | Purpose |
 |---|---|
-| `main` | Stable installation branch; currently `v0.1.0` behavior plus repository-maintenance fixes |
-| `develop` | Unreleased next-version work; currently the optional-hardware candidate planned for `v0.2.0` |
+| `main` | Stable installation branch and source for supported installation |
+| `develop` | Integration branch for the next unreleased version |
 | `vX.Y.Z` tags | Immutable public releases and the source for GitHub Release archives |
 
 Create normal feature and fix branches from `develop`, and merge them back into `develop`. Merge `develop` into `main` only after the complete candidate has passed validation and attended hardware testing. Tag the tested `main` commit immediately after that release merge.
@@ -86,20 +86,27 @@ On the repository home page, use the **About** gear and add:
 
 In **Settings → General → Features**, enable Issues if you want public reports. In **Settings → Code security and analysis**, enable private vulnerability reporting if available.
 
-## 6. Existing first release
+## 6. Publish `v0.2.0`
 
 `v0.1.0` has already been published. Do not recreate, move, or reuse that tag. Its release notes warn that the configuration requires the Peltier cooler, UV LEDs, and exhaust servo.
 
-For future releases, Moonraker's `stable` Git updater requires a semantic version tag. After validation and hardware testing are complete, merge `develop` into `main`, verify the exact commit, and create the next tag. For the optional-hardware release, that tag is expected to be `v0.2.0`:
+`v0.2.0` is the optional-hardware release. If that tag already exists, do not recreate, move, or reuse it. Otherwise, publish it only after the complete `develop` candidate passes validation and attended hardware testing:
+
+1. Open the [`main ← develop` comparison](https://github.com/dyocis/SM2_PCBv3_automation/compare/main...develop).
+2. Create a pull request with `main` as the base and `develop` as the compare branch.
+3. Review the complete diff and confirm the release-facing README and changelog are included.
+4. Wait for the `Validate` workflow to pass.
+5. Merge the pull request. Keep the `develop` branch for the next release cycle.
+6. Update a local clone to the merged `main` commit, verify it, and create the annotated tag:
 
 ```bash
-git checkout develop
-git pull --ff-only
 git checkout main
-git pull --ff-only
-git merge --ff-only develop
+git pull --ff-only origin main
+git status
+git rev-parse --short HEAD
 git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin main v0.2.0
+git show v0.2.0 --no-patch
+git push origin v0.2.0
 ```
 
 The `Release` workflow will:
@@ -147,18 +154,21 @@ node --check dashboard/app.js
 python3 scripts/validate_repo.py
 ```
 
-For config changes, test an attended printer in this order:
+For config changes, run at least the filter-only, servo-only, UV-only, and all-options installer combinations in a disposable configuration directory. Confirm Peltier selection also enables the servo and that an intentionally edited Peltier-without-servo configuration faults at startup.
+
+Then test an attended printer in this order, skipping only checks for hardware reported as `NOT INSTALLED`:
 
 1. Klipper parses and reaches `ready` after `FIRMWARE_RESTART`.
 2. Sensor names, temperature, humidity, and VOC values are plausible.
 3. Fan command and measured RPM agree.
-4. Vent open/close direction and angles are correct.
-5. UV refuses unsafe operation and turns off on fault.
-6. Peltier waits for a closed vent and verified airflow.
-7. Peltier cooldown preserves fan airflow for the configured duration.
-8. PCB/MCU over-temperature and low-RPM paths de-energize outputs.
-9. Print start/end and material selection behave correctly.
-10. Dashboard and calibration maintenance states render correctly.
+4. `NEVERMORE_STATUS` capability detection matches the physical build.
+5. Vent open/close direction and angles are correct when installed.
+6. UV refuses unsafe operation and turns off on fault when installed.
+7. Advanced/beta Peltier waits for a closed vent and verified airflow when installed.
+8. Peltier cooldown preserves fan airflow for the configured duration.
+9. PCB/MCU over-temperature and low-RPM paths de-energize outputs.
+10. Print start/end and material selection behave correctly.
+11. Dashboard and calibration maintenance states render correctly, including `NOT INSTALLED` outputs.
 
 Never shorten or bypass physical-safety tests to meet a release date.
 
@@ -190,20 +200,17 @@ Not every change merged into `develop` needs an immediate release. Publish when 
 
 | Change | Example | Version action |
 |---|---|---|
-| Backward-compatible fix | Dashboard display correction | `v0.1.0` → `v0.1.1` |
-| Backward-compatible feature | New profile or optional installer flag | `v0.1.0` → `v0.2.0` |
+| Backward-compatible fix | Dashboard display correction | `v0.2.0` → `v0.2.1` |
+| Backward-compatible feature | New profile or optional installer flag | `v0.2.0` → `v0.3.0` |
 | Breaking config/hardware behavior | Renamed public macros or incompatible local config | `v0.2.0` → `v1.0.0` or next major |
 
-Merge the tested candidate to `main`, then create and push the annotated tag:
+Promote the tested candidate through a `main ← develop` pull request. After it is merged, update a local `main` checkout and create the annotated tag:
 
 ```bash
-git checkout develop
-git pull --ff-only
 git checkout main
-git pull --ff-only
-git merge --ff-only develop
-git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin main v0.1.1
+git pull --ff-only origin main
+git tag -a v0.2.1 -m "Release v0.2.1"
+git push origin v0.2.1
 ```
 
 ## Correcting a bad release
@@ -213,7 +220,7 @@ Do not move or reuse a published tag. That makes installed versions ambiguous.
 1. Identify the last known-good tag.
 2. If the current release presents a hardware risk, edit its GitHub Release notes immediately with a prominent warning.
 3. Revert the bad commit on a new branch, validate and test it, and merge the pull request.
-4. Publish a new patch tag, such as `v0.1.2`.
+4. Publish a new patch tag, such as `v0.2.2`.
 5. Explain the affected versions, safe state, fix, and rollback command in the release notes.
 
 Users can pin a known-good version with:
@@ -221,7 +228,7 @@ Users can pin a known-good version with:
 ```bash
 cd ~/SM2_PCBv3_automation
 git fetch --tags
-git checkout v0.1.1
+git checkout v0.2.1
 ```
 
 They return to normal stable tracking with:
