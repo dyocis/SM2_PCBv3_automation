@@ -2,6 +2,9 @@
 
 Klipper automation and a live Moonraker dashboard for the Nevermore StealthMax V2 using Isik's Tech PCB v3, two BME280 + SGP40 sensor modules, a tachometer fan, UV output, Peltier cooling, servo vent, and addressable status LEDs.
 
+> [!NOTE]
+> **Current stable code:** `main` provides the `v0.1.0` automation with repository-maintenance fixes. It still requires the UV LEDs, Peltier cooler, and exhaust servo. Optional-hardware support is unreleased on [`develop`](https://github.com/dyocis/SM2_PCBv3_automation/tree/develop) and is planned for `v0.2.0` after hardware testing.
+
 > [!IMPORTANT]
 > This is a personal, best-effort project. I intend to continue improving the public files when I can, but I cannot promise ongoing support or a regular update schedule. You are responsible for your own printer, wiring, configuration, safety checks, and any software you install. This project is provided as-is, without warranty; I accept no responsibility for damage, failed prints, downtime, injury, or other issues arising from its installation or use.
 
@@ -32,6 +35,9 @@ The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, hel
 
 ## Requirements
 
+> [!CAUTION]
+> **The current `v0.1.0` configuration assumes the Peltier cooler, UV LEDs, and exhaust servo are all installed. If any of these add-ons are missing, do not install the current stable version.** Optional-hardware support is planned for `v0.2.0`; the development branch is not a release.
+
 - A Linux Klipper host such as Raspberry Pi OS, MainsailOS, or a KIAUH installation
 - Klipper, Moonraker, Git, Python 3, and `sudo`
 - Nginx for the optional dashboard
@@ -58,6 +64,8 @@ This separates firmware, wiring, connector, sensor, and hardware faults from aut
 ## Quick install
 
 SSH to the printer host as the normal Klipper user. Do **not** switch to root.
+
+The command below installs the stable `main` branch. It does not install the unreleased `develop` branch.
 
 Review the [installer source](https://github.com/dyocis/SM2_PCBv3_automation/blob/main/scripts/install.sh), then run:
 
@@ -277,14 +285,14 @@ To also remove this repository checkout:
 
 The recommended release path is:
 
-1. Create a branch for one focused change.
+1. Create a focused feature or fix branch from `develop`.
 2. Run `python3 scripts/validate_repo.py` and `bash -n scripts/*.sh`.
-3. Open a pull request and let GitHub Actions validate it.
-4. Merge into `main` only after testing on hardware.
-5. Tag the tested commit using semantic versioning, for example `v0.1.0`.
-6. Let the release workflow build the ZIP and SHA-256 checksum and publish the GitHub Release.
+3. Open a pull request into `develop` and let GitHub Actions validate it.
+4. Test the complete `develop` candidate on the supported hardware.
+5. Merge `develop` into `main` only when the candidate is ready to release.
+6. Tag the tested `main` commit using semantic versioning, then let the release workflow build the ZIP, checksum, and GitHub Release.
 
-`main` is the public development history; tagged releases are what the `stable` Moonraker channel installs. Full first-time setup and release instructions are in [Maintainer setup](docs/MAINTAINER_SETUP.md). Change summaries belong in [CHANGELOG.md](CHANGELOG.md).
+`main` is the stable installation branch, `develop` contains unreleased next-version work, and version tags identify immutable releases. Full setup and release instructions are in [Maintainer setup](docs/MAINTAINER_SETUP.md). Change summaries belong in [CHANGELOG.md](CHANGELOG.md).
 
 ## Support boundaries
 

@@ -10,7 +10,7 @@ Confirm the problem on a tagged release with unmodified shared files. Check your
 
 ## Pull requests
 
-1. Create a focused branch from `main`.
+1. Create a focused branch from `develop` and target `develop` with the pull request.
 2. Keep printer-specific data out of the shared files.
 3. Update the README and changelog when behavior changes.
 4. Run:
@@ -24,4 +24,3 @@ Confirm the problem on a tagged release with unmodified shared files. Check your
 5. Explain the hardware used, checks performed, safety impact, and rollback path in the pull request.
 
 Changes affecting UV, Peltier, fan, vent, temperature, or calibration interlocks must be tested attended on the official hardware before release.
-

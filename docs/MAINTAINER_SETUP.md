@@ -4,6 +4,16 @@ This guide is for the owner of `dyocis/SM2_PCBv3_automation`. It assumes little 
 
 This remains a personal, best-effort project. A clean workflow makes updates safer and easier to publish; it does not create an obligation to release on a schedule.
 
+## Current branch and release model
+
+| Ref | Purpose |
+|---|---|
+| `main` | Stable installation branch; currently `v0.1.0` behavior plus repository-maintenance fixes |
+| `develop` | Unreleased next-version work; currently the optional-hardware candidate planned for `v0.2.0` |
+| `vX.Y.Z` tags | Immutable public releases and the source for GitHub Release archives |
+
+Create normal feature and fix branches from `develop`, and merge them back into `develop`. Merge `develop` into `main` only after the complete candidate has passed validation and attended hardware testing. Tag the tested `main` commit immediately after that release merge.
+
 ## 1. Create the repository
 
 The repository has already been created at:
@@ -76,21 +86,26 @@ On the repository home page, use the **About** gear and add:
 
 In **Settings → General → Features**, enable Issues if you want public reports. In **Settings → Code security and analysis**, enable private vulnerability reporting if available.
 
-## 6. Create the first release
+## 6. Existing first release
 
-Moonraker's `stable` Git updater requires a semantic version tag. After the validation workflow passes and hardware testing is complete:
+`v0.1.0` has already been published. Do not recreate, move, or reuse that tag. Its release notes warn that the configuration requires the Peltier cooler, UV LEDs, and exhaust servo.
+
+For future releases, Moonraker's `stable` Git updater requires a semantic version tag. After validation and hardware testing are complete, merge `develop` into `main`, verify the exact commit, and create the next tag. For the optional-hardware release, that tag is expected to be `v0.2.0`:
 
 ```bash
+git checkout develop
+git pull --ff-only
 git checkout main
 git pull --ff-only
-git tag -a v0.1.0 -m "Initial public release"
-git push origin v0.1.0
+git merge --ff-only develop
+git tag -a v0.2.0 -m "Release v0.2.0"
+git push origin main v0.2.0
 ```
 
 The `Release` workflow will:
 
 1. Re-run validation.
-2. Build `SM2_PCBv3_automation-v0.1.0.zip` from the tagged commit.
+2. Build a versioned ZIP from the tagged commit.
 3. Generate `SHA256SUMS`.
 4. Create the GitHub Release with generated notes.
 
@@ -110,14 +125,14 @@ Open **Settings → Rules → Rulesets** and create a branch ruleset targeting `
 
 For a one-person project, one approving review is optional; requiring it can prevent you from merging your own maintenance work. The status check and no-force-push rules provide the most value here.
 
-## Normal update workflow
+## Normal development workflow
 
-Never develop a change directly on a printer's installed `main` checkout. Work in a separate local clone.
+Never develop a change directly on a printer's installed `main` checkout. Work in a separate local clone and keep unreleased changes on `develop` or a branch created from it.
 
 ### 1. Start a branch
 
 ```bash
-git checkout main
+git checkout develop
 git pull --ff-only
 git checkout -b feature/short-description
 ```
@@ -158,7 +173,7 @@ git push -u origin feature/short-description
 
 ### 4. Open a pull request
 
-On GitHub, choose **Compare & pull request**. Explain:
+On GitHub, choose **Compare & pull request** and set the base branch to `develop`. Explain:
 
 - What changed and why
 - Which official hardware was used
@@ -167,11 +182,11 @@ On GitHub, choose **Compare & pull request**. Explain:
 - Upgrade instructions, if any
 - Rollback path
 
-Wait for `Validate` to pass, review the diff, then squash-merge or merge the pull request.
+Wait for `Validate` to pass, review the diff, then squash-merge or merge the pull request into `develop`.
 
 ### 5. Decide whether to release
 
-Not every merged documentation change needs an immediate release. Publish when a tested set of changes is useful. Update `CHANGELOG.md`, then choose the next version:
+Not every change merged into `develop` needs an immediate release. Publish when a tested set of changes is useful. Update `CHANGELOG.md`, complete attended hardware testing, then choose the next version:
 
 | Change | Example | Version action |
 |---|---|---|
@@ -179,13 +194,16 @@ Not every merged documentation change needs an immediate release. Publish when a
 | Backward-compatible feature | New profile or optional installer flag | `v0.1.0` → `v0.2.0` |
 | Breaking config/hardware behavior | Renamed public macros or incompatible local config | `v0.2.0` → `v1.0.0` or next major |
 
-Create and push the annotated tag:
+Merge the tested candidate to `main`, then create and push the annotated tag:
 
 ```bash
+git checkout develop
+git pull --ff-only
 git checkout main
 git pull --ff-only
+git merge --ff-only develop
 git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin v0.1.1
+git push origin main v0.1.1
 ```
 
 ## Correcting a bad release
@@ -225,4 +243,3 @@ Never commit:
 - Backups of a complete printer configuration
 
 The repository validator catches common patterns, but it is not a substitute for reading the staged diff before every push.
-

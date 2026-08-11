@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Repository
+
+- Kept `main` aligned with the current stable behavior and moved next-release development to `develop`.
+- Updated GitHub Actions to the Node.js 24-compatible `actions/checkout@v7` runtime.
+
+## [0.1.0] - 2026-08-11
+
 ### Added
 
 - Public, sanitized Klipper configuration for Nevermore StealthMax V2 with Isik's Tech PCB v3.
@@ -13,12 +20,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Standalone Moonraker dashboard with Mainsail navigation integration and direct Fluidd access.
 - Installer, uninstaller, Moonraker update configuration, repository validation, and release automation.
 
-## [0.1.0] - 2026-08-11
+### Known limitations
 
-### Added
-
-- Initial public release candidate.
+- This release assumes the Peltier cooler, UV LEDs, and exhaust servo are installed. Users without all three add-ons should not install `v0.1.0`.
 
 [Unreleased]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/dyocis/SM2_PCBv3_automation/releases/tag/v0.1.0
-

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 PROJECT_NAME="SM2_PCBv3_automation"
 REPO_URL="https://github.com/dyocis/SM2_PCBv3_automation.git"
+STABLE_COMPAT_VERSION="v0.1.0"
 DEFAULT_DASHBOARD_PORT=7131
 DEFAULT_MOONRAKER_PORT=7125
 
@@ -474,6 +475,8 @@ restart_services() {
 
 main() {
     log "Personal project notice: this software is provided as-is, without a promised update schedule. You are responsible for your printer, wiring, configuration, and installed software."
+    warn "Current stable ${STABLE_COMPAT_VERSION} configuration requires the UV LEDs, Peltier cooler, and exhaust servo."
+    warn "If any of those add-ons are missing, cancel this installation. Optional-hardware support is unreleased and planned for v0.2.0."
     printf '%s\n' "Supported hardware: official Isik's Tech StealthMax PCB v3 and BME280 + SGP40 modules."
     printf '%s\n' "PCB:     https://store.isiks.tech/products/nevermore-stealthmax-pcb-3"
     printf '%s\n' "Sensors: https://store.isiks.tech/products/bme280-sgp40-air-quality-sensors-for-nevermore-air-filters"
@@ -481,6 +484,7 @@ main() {
     printf '%s\n' "Before continuing, boot and test Isik's official SM3.cfg, then disable its [include] line."
     printf '%s\n' "Guide:   https://docs.isiks.tech/Nevermore/Firmware-Setup/#klipper-config"
     printf '%s\n' "Do not load the official test config and this package at the same time; their Klipper sections overlap."
+    confirm "UV LEDs, Peltier cooler, and exhaust servo are all installed; continue?" || die "Installation cancelled."
     confirm "Official hardware config tested and its include disabled; continue?" || die "Installation cancelled."
     detect_config_root
     detect_moonraker_config
