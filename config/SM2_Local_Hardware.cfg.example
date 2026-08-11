@@ -96,29 +96,45 @@ tachometer_pin: SM:PB15
 tachometer_ppr: 2
 
 #####################################################################
-# EXHAUST VENT SERVO
+# OPTIONAL EXHAUST VENT SERVO
+#
+# Leave this block commented when no servo is installed. The automatic
+# installer enables it only when selected. Peltier support requires it.
 #####################################################################
 
-[servo SM_Vent]
-pin: SM:PD0
+# SM2_OPTION_VENT_BEGIN
+#? [servo SM_Vent]
+#? pin: SM:PD0
+# SM2_OPTION_VENT_END
 
 #####################################################################
-# UV AND PELTIER OUTPUTS
+# OPTIONAL UV OUTPUT
 #####################################################################
 
-[output_pin uv]
-pin: SM:PA1
-pwm: true
-shutdown_value: 0
-value: 0
-cycle_time: 0.01
+# SM2_OPTION_UV_BEGIN
+#? [output_pin uv]
+#? pin: SM:PA1
+#? pwm: true
+#? shutdown_value: 0
+#? value: 0
+#? cycle_time: 0.01
+# SM2_OPTION_UV_END
 
-[output_pin peltier]
-pin: SM:PD3
-pwm: true
-shutdown_value: 0
-value: 0
-cycle_time: 0.01
+#####################################################################
+# OPTIONAL PELTIER OUTPUT — ADVANCED/BETA
+#
+# Peltier support requires the exhaust vent servo block above. Do not
+# enable this block without the complete mechanical Peltier add-on.
+#####################################################################
+
+# SM2_OPTION_PELTIER_BEGIN
+#? [output_pin peltier]
+#? pin: SM:PD3
+#? pwm: true
+#? shutdown_value: 0
+#? value: 0
+#? cycle_time: 0.01
+# SM2_OPTION_PELTIER_END
 
 #####################################################################
 # PCB AND MCU OVER-TEMPERATURE INPUTS — DO NOT REMOVE

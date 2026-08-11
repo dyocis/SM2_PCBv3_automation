@@ -21,6 +21,9 @@ CANBUS_UUID=""
 ASSUME_YES=0
 SKIP_DASHBOARD=0
 SKIP_DEPENDENCIES=0
+WITH_UV=-1
+WITH_PELTIER=-1
+WITH_VENT_SERVO=-1
 
 log() { printf '\n[%s] %s\n' "${PROJECT_NAME}" "$*"; }
 warn() { printf '\n[%s] WARNING: %s\n' "${PROJECT_NAME}" "$*" >&2; }
@@ -44,6 +47,9 @@ usage() {
     printf '%s\n' "  --public-host HOST       Hostname/IP placed in the dashboard URL"
     printf '%s\n' "  --skip-dashboard         Do not install the Nginx dashboard"
     printf '%s\n' "  --skip-dependencies      Do not install missing Klipper extensions"
+    printf '%s\n' "  --with-uv                Enable the optional UV output"
+    printf '%s\n' "  --with-vent-servo        Enable the optional exhaust vent servo"
+    printf '%s\n' "  --with-peltier           Enable advanced/beta Peltier support (also enables servo)"
     printf '%s\n' "  --yes                    Accept prompts (MCU address still required)"
     printf '%s\n' "  -h, --help               Show this help"
 }
@@ -63,6 +69,9 @@ while (($#)); do
         --public-host) PUBLIC_HOST="${2:?missing value}"; shift 2 ;;
         --skip-dashboard) SKIP_DASHBOARD=1; shift ;;
         --skip-dependencies) SKIP_DEPENDENCIES=1; shift ;;
+        --with-uv) WITH_UV=1; shift ;;
+        --with-vent-servo) WITH_VENT_SERVO=1; shift ;;
+        --with-peltier) WITH_PELTIER=1; WITH_VENT_SERVO=1; shift ;;
         --yes) ASSUME_YES=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) die "Unknown option: $1" ;;
@@ -252,6 +261,52 @@ choose_mcu_address() {
     [[ -n "${MCU_SERIAL}" || -n "${CANBUS_UUID}" ]] || die "A PCB address is required. Re-run with --mcu-serial PATH or --canbus-uuid UUID."
 }
 
+choose_optional_hardware() {
+    if ((WITH_VENT_SERVO < 0)); then
+        if ((ASSUME_YES == 0)) && confirm "Is the exhaust vent servo installed?"; then
+            WITH_VENT_SERVO=1
+        else
+            WITH_VENT_SERVO=0
+        fi
+    fi
+
+    if ((WITH_UV < 0)); then
+        if ((ASSUME_YES == 0)) && confirm "Are the optional UV lights installed?"; then
+            WITH_UV=1
+        else
+            WITH_UV=0
+        fi
+    fi
+
+    if ((WITH_PELTIER < 0)); then
+        if ((ASSUME_YES == 0)) && confirm "Is the advanced/beta Peltier add-on installed?"; then
+            WITH_PELTIER=1
+        else
+            WITH_PELTIER=0
+        fi
+    fi
+
+    if ((WITH_PELTIER)); then
+        WITH_VENT_SERVO=1
+        warn "Peltier support is advanced/beta and requires the exhaust vent servo. Servo support has been enabled."
+        warn "This release does not configure or monitor Peltier hot-side/cold-side thermistors; that protection is planned for a future release."
+        if ((ASSUME_YES == 0)); then
+            confirm "I understand the current Peltier thermistor limitation; continue?" || die "Installation cancelled."
+        fi
+    fi
+}
+
+enable_optional_block() {
+    local config_file="$1"
+    local feature="$2"
+    local begin="# SM2_OPTION_${feature}_BEGIN"
+    local end="# SM2_OPTION_${feature}_END"
+
+    grep -Fqs "${begin}" "${config_file}" || die "Optional hardware marker missing: ${begin}"
+    grep -Fqs "${end}" "${config_file}" || die "Optional hardware marker missing: ${end}"
+    sed -i "/^${begin}$/,/^${end}$/ s/^#? //" "${config_file}"
+}
+
 write_local_config() {
     local target_dir="${CONFIG_ROOT}/${PROJECT_NAME}"
     local local_config="${target_dir}/SM2_Local_Hardware.cfg"
@@ -259,6 +314,7 @@ write_local_config() {
     choose_mcu_address "${local_config}"
 
     if [[ ! -f "${local_config}" ]]; then
+        choose_optional_hardware
         cp "${INSTALL_DIR}/config/SM2_Local_Hardware.cfg.example" "${local_config}"
         if [[ -n "${CANBUS_UUID}" ]]; then
             sed -i "s|^serial: .*|# serial: /dev/serial/by-id/REPLACE_WITH_YOUR_PCB_SERIAL|" "${local_config}"
@@ -266,10 +322,27 @@ write_local_config() {
         else
             sed -i "s|^serial: .*|serial: ${MCU_SERIAL}|" "${local_config}"
         fi
+        ((WITH_VENT_SERVO == 0)) || enable_optional_block "${local_config}" "VENT"
+        ((WITH_UV == 0)) || enable_optional_block "${local_config}" "UV"
+        ((WITH_PELTIER == 0)) || enable_optional_block "${local_config}" "PELTIER"
         chmod 600 "${local_config}"
         log "Created local hardware configuration: ${local_config}"
+        log "Optional hardware: servo=$([[ ${WITH_VENT_SERVO} -eq 1 ]] && printf installed || printf absent), UV=$([[ ${WITH_UV} -eq 1 ]] && printf installed || printf absent), Peltier=$([[ ${WITH_PELTIER} -eq 1 ]] && printf installed || printf absent)"
     else
         log "Preserved existing local hardware configuration: ${local_config}"
+        local configured_optional=()
+        grep -qsE '^[[:space:]]*\[servo[[:space:]]+SM_Vent\][[:space:]]*$' "${local_config}" && configured_optional+=("servo")
+        grep -qsE '^[[:space:]]*\[output_pin[[:space:]]+uv\][[:space:]]*$' "${local_config}" && configured_optional+=("UV")
+        grep -qsE '^[[:space:]]*\[output_pin[[:space:]]+peltier\][[:space:]]*$' "${local_config}" && configured_optional+=("Peltier")
+        if ((${#configured_optional[@]})); then
+            log "Configured optional hardware in the preserved file: ${configured_optional[*]}"
+        else
+            log "Configured optional hardware in the preserved file: none"
+        fi
+        warn "Verify the configured optional sections match the hardware physically installed before restarting Klipper."
+        if ((WITH_UV >= 0 || WITH_PELTIER >= 0 || WITH_VENT_SERVO >= 0)); then
+            warn "Optional-hardware flags apply only when creating a new local hardware file. Edit ${local_config} to change an existing installation."
+        fi
     fi
 
     local shared

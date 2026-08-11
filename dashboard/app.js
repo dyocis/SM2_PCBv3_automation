@@ -22,6 +22,7 @@
     "HEAVY VOC": "High VOC load detected; filter is running at full output.",
     "VOC EMERGENCY": "Emergency VOC threshold exceeded; maximum treatment is active.",
     "CHAMBER COOLING": "Chamber limit reached; active cooling is latched.",
+    "CHAMBER HIGH - NO VENT": "Chamber limit reached, but no exhaust servo is installed; filtration remains active.",
     "MANUAL OVERRIDE": "Automatic control is paused by a manual override.",
     DISABLED: "Nevermore automatic control is disabled.",
     FAULT: "A safety condition requires attention.",
@@ -58,7 +59,7 @@
       "warningLabel", "highLabel", "emergencyLabel", "coolingPill", "tempIn", "tempOut",
       "tempDelta", "hysteresisRange", "temperaturePosition", "coolingOffLabel", "coolingOnLabel",
       "fanIcon", "fanComponentText", "fanComponentState", "uvComponentState",
-      "peltierComponentState", "lastAction", "lastActionClock", "transitionCount", "printState",
+      "peltierComponentState", "ventComponentState", "lastAction", "lastActionClock", "transitionCount", "printState",
       "filename", "dataAge", "priorityStack", "footerEndpoint",
     ].map((id) => [id, $(id)])
   );
@@ -291,8 +292,12 @@
       chamberLatched: truthy(sm.chamber_cooling_latched),
       fanSpeed,
       rpm: numberOr(fan.rpm, sm.last_rpm, 0),
+      uvInstalled: truthy(sm.uv_installed),
+      peltierInstalled: truthy(sm.peltier_installed),
+      ventInstalled: truthy(sm.vent_servo_installed),
       uv: truthy(sm.uv),
       peltier: truthy(sm.peltier),
+      ventOpen: truthy(sm.vent_open),
       tempIn,
       tempOut,
       tempDelta,
@@ -374,12 +379,14 @@
     els.temperaturePosition.style.left = `${temperaturePct}%`;
 
     setComponent(els.fanComponentState, fanPercent > 0, `${fanPercent}%`);
-    setComponent(els.uvComponentState, vm.uv);
-    setComponent(els.peltierComponentState, vm.peltier);
+    setOptionalComponent(els.uvComponentState, vm.uvInstalled, vm.uv);
+    setOptionalComponent(els.peltierComponentState, vm.peltierInstalled, vm.peltier);
+    setOptionalComponent(els.ventComponentState, vm.ventInstalled, vm.ventOpen, "OPEN", "CLOSED");
     els.fanIcon.classList.toggle("is-running", fanPercent > 0);
     els.fanComponentText.textContent = fanPercent > 0 ? `${formatInteger(vm.rpm)} RPM measured` : "Stopped";
-    document.querySelector(".uv-icon")?.classList.toggle("is-active", vm.uv);
-    document.querySelector(".peltier-icon")?.classList.toggle("is-active", vm.peltier);
+    document.querySelector(".uv-icon")?.classList.toggle("is-active", vm.uvInstalled && vm.uv);
+    document.querySelector(".peltier-icon")?.classList.toggle("is-active", vm.peltierInstalled && vm.peltier);
+    document.querySelector(".vent-icon")?.classList.toggle("is-active", vm.ventInstalled && vm.ventOpen);
 
     els.lastAction.textContent = vm.lastAction || "NONE";
     els.lastActionClock.textContent = vm.lastActionClock && vm.lastActionClock !== "0"
@@ -535,6 +542,10 @@
           sgp40_calibration_phase: "IDLE",
           sgp40_calibration_remaining: 0,
           sgp40_calibration_revision: 1,
+          uv_installed: 1,
+          peltier_installed: 1,
+          vent_servo_installed: 1,
+          vent_open: 0,
           ...frame.sm,
         },
         "fan_generic Filter": frame.fan,
@@ -579,6 +590,18 @@
   function setComponent(element, active, activeLabel = "ON") {
     element.textContent = active ? activeLabel : "OFF";
     element.classList.toggle("is-active", active);
+  }
+
+  function setOptionalComponent(element, installed, active, activeLabel = "ON", inactiveLabel = "OFF") {
+    if (!installed) {
+      element.textContent = "NOT INSTALLED";
+      element.classList.remove("is-active");
+      element.classList.add("is-unavailable");
+      return;
+    }
+    element.textContent = active ? activeLabel : inactiveLabel;
+    element.classList.toggle("is-active", active);
+    element.classList.remove("is-unavailable");
   }
 
   function positionThreshold(element, value, max) {

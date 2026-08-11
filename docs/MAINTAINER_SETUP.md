@@ -132,18 +132,21 @@ node --check dashboard/app.js
 python3 scripts/validate_repo.py
 ```
 
-For config changes, test an attended printer in this order:
+For config changes, run at least the filter-only, servo-only, UV-only, and all-options installer combinations in a disposable configuration directory. Confirm Peltier selection also enables the servo and that an intentionally edited Peltier-without-servo configuration faults at startup.
+
+Then test an attended printer in this order, skipping only checks for hardware reported as `NOT INSTALLED`:
 
 1. Klipper parses and reaches `ready` after `FIRMWARE_RESTART`.
 2. Sensor names, temperature, humidity, and VOC values are plausible.
 3. Fan command and measured RPM agree.
-4. Vent open/close direction and angles are correct.
-5. UV refuses unsafe operation and turns off on fault.
-6. Peltier waits for a closed vent and verified airflow.
-7. Peltier cooldown preserves fan airflow for the configured duration.
-8. PCB/MCU over-temperature and low-RPM paths de-energize outputs.
-9. Print start/end and material selection behave correctly.
-10. Dashboard and calibration maintenance states render correctly.
+4. `NEVERMORE_STATUS` capability detection matches the physical build.
+5. Vent open/close direction and angles are correct when installed.
+6. UV refuses unsafe operation and turns off on fault when installed.
+7. Advanced/beta Peltier waits for a closed vent and verified airflow when installed.
+8. Peltier cooldown preserves fan airflow for the configured duration.
+9. PCB/MCU over-temperature and low-RPM paths de-energize outputs.
+10. Print start/end and material selection behave correctly.
+11. Dashboard and calibration maintenance states render correctly, including `NOT INSTALLED` outputs.
 
 Never shorten or bypass physical-safety tests to meet a release date.
 
@@ -225,4 +228,3 @@ Never commit:
 - Backups of a complete printer configuration
 
 The repository validator catches common patterns, but it is not a substitute for reading the staged diff before every push.
-
