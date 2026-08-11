@@ -150,6 +150,40 @@ def validate_configs(errors: list[str]) -> None:
     if "[gcode_macro SM2_SETTINGS]" not in local_example:
         fail(errors, "local hardware example must define SM2_SETTINGS")
 
+    optional_sections = {
+        "VENT": "[servo SM_Vent]",
+        "UV": "[output_pin uv]",
+        "PELTIER": "[output_pin peltier]",
+    }
+    for feature, section in optional_sections.items():
+        begin = f"# SM2_OPTION_{feature}_BEGIN"
+        end = f"# SM2_OPTION_{feature}_END"
+        if local_example.count(begin) != 1 or local_example.count(end) != 1:
+            fail(errors, f"local hardware example must contain one {feature} marker pair")
+        if f"#? {section}" not in local_example:
+            fail(errors, f"optional {feature} section must be disabled with the #? prefix")
+        if re.search(rf"^\s*{re.escape(section)}\s*$", local_example, re.MULTILINE):
+            fail(errors, f"optional {feature} section must not be enabled in the public example")
+
+    variables = (ROOT / "config/SM2_Variables.cfg").read_text(encoding="utf-8")
+    control = (ROOT / "config/SM2_Control.cfg").read_text(encoding="utf-8")
+    hardware_control = (ROOT / "config/SM2_Hardware_Control.cfg").read_text(encoding="utf-8")
+    for capability in ("uv_installed", "peltier_installed", "vent_servo_installed"):
+        if f"variable_{capability}:" not in variables:
+            fail(errors, f"missing runtime capability variable: {capability}")
+    for object_name, content, label in (
+        ("output_pin uv", control, "UV control"),
+        ("output_pin peltier", control, "Peltier control"),
+        ("servo SM_Vent", hardware_control, "vent control"),
+    ):
+        if f'"{object_name}" in printer' not in content:
+            fail(errors, f"{label} must detect optional object: {object_name}")
+
+    installer = (ROOT / "scripts/install.sh").read_text(encoding="utf-8")
+    for flag in ("--with-uv", "--with-vent-servo", "--with-peltier"):
+        if flag not in installer:
+            fail(errors, f"installer is missing optional-hardware flag: {flag}")
+
 
 def validate_dashboard(errors: list[str]) -> None:
     html = (ROOT / "dashboard/index.html").read_text(encoding="utf-8")

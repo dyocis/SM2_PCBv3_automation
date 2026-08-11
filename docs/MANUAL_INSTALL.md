@@ -76,6 +76,19 @@ chmod 600 "$SM2_CONFIG_ROOT/SM2_PCBv3_automation/SM2_Local_Hardware.cfg"
 
 Edit that local file. Choose USB or CAN—never both—and verify every pin and safety value against the official board documentation and physical wiring.
 
+The UV, exhaust-servo, and Peltier sections are disabled by default. Enable only installed hardware by removing the `#? ` prefix from each configuration line between the corresponding `SM2_OPTION_*_BEGIN` and `SM2_OPTION_*_END` markers. Leave the marker lines themselves commented.
+
+| Installed hardware | Blocks to enable |
+|---|---|
+| Filter only | None |
+| UV only | `UV` |
+| Exhaust servo only | `VENT` |
+| UV + exhaust servo | `UV`, `VENT` |
+| Advanced/beta Peltier | `PELTIER`, `VENT` (both required), plus `UV` only if installed |
+
+> [!WARNING]
+> Peltier support currently has no configured hot-side/cold-side thermistors because those thermistors are not yet installed on the development machine. Thermistor monitoring is planned for a future release. Do not enable `PELTIER` without `VENT`; startup detection rejects that unsupported combination.
+
 ## 5. Link the shared configuration
 
 ```bash
@@ -162,4 +175,4 @@ sudo systemctl restart moonraker
 sudo systemctl restart "$SM2_KLIPPER_SERVICE"
 ```
 
-Run `FIRMWARE_RESTART` and `NEVERMORE_STATUS`, then follow the attended output and interlock test sequence in the README. Do not operate the Peltier or UV until fan RPM, vent direction, and emergency shutdown behavior are verified.
+Run `FIRMWARE_RESTART` and `NEVERMORE_STATUS`, then confirm the reported `CAPABILITIES` line matches the installed hardware. Follow the attended output and interlock test sequence in the README. Do not operate the Peltier or UV until fan RPM, vent direction, and emergency shutdown behavior are verified, and do not treat the current Peltier beta support as thermistor-protected.

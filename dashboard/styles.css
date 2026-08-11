@@ -873,6 +873,12 @@ button {
   color: var(--blue);
 }
 
+.vent-icon.is-active {
+  border-color: rgba(77, 227, 193, 0.3);
+  background: rgba(77, 227, 193, 0.09);
+  color: var(--cyan);
+}
+
 .component-state {
   color: #687070;
   font-size: 0.65rem;
@@ -882,6 +888,12 @@ button {
 
 .component-state.is-active {
   color: var(--cyan);
+}
+
+.component-state.is-unavailable {
+  color: var(--muted);
+  font-size: 0.56rem;
+  letter-spacing: 0.06em;
 }
 
 .activity-primary {
