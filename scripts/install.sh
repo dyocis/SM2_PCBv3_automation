@@ -389,7 +389,43 @@ write_local_config() {
     local printer_config="${CONFIG_ROOT}/printer.cfg"
     if ! grep -qsE '^[[:space:]]*\[include[[:space:]]+SM2_PCBv3\.cfg\][[:space:]]*$' "${printer_config}"; then
         cp -p "${printer_config}" "${printer_config}.before-sm2-install"
-        printf '\n# Nevermore StealthMax V2 / PCB v3 automation\n[include SM2_PCBv3.cfg]\n' >>"${printer_config}"
+        python3 - "${printer_config}" <<'PY'
+import os
+import pathlib
+import re
+import stat
+import sys
+import tempfile
+
+path = pathlib.Path(sys.argv[1])
+content = path.read_text(encoding="utf-8")
+include_block = "# Nevermore StealthMax V2 / PCB v3 automation\n[include SM2_PCBv3.cfg]\n"
+save_config = re.search(
+    r"(?m)^#\*# <---------------------- SAVE_CONFIG ---------------------->\s*$",
+    content,
+)
+
+if save_config:
+    prefix = content[: save_config.start()].rstrip()
+    suffix = content[save_config.start() :]
+    updated = f"{prefix}\n\n{include_block}\n{suffix}"
+else:
+    updated = f"{content.rstrip()}\n\n{include_block}"
+
+mode = stat.S_IMODE(path.stat().st_mode)
+fd, temporary_name = tempfile.mkstemp(prefix=".sm2-printer.", dir=path.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as temporary:
+        temporary.write(updated)
+    os.chmod(temporary_name, mode)
+    os.replace(temporary_name, path)
+except BaseException:
+    try:
+        os.unlink(temporary_name)
+    except FileNotFoundError:
+        pass
+    raise
+PY
         log "Added [include SM2_PCBv3.cfg] to printer.cfg."
     fi
 }
