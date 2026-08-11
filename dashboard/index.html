@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0e10" />
+    <meta
+      name="description"
+      content="Live read-only dashboard for Nevermore StealthMax V2 PCB v3 automation"
+    />
+    <title>SM2 PCB v3 · Nevermore</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Nevermore dashboard home">
+        <span class="brand-mark" aria-hidden="true">
+          <span class="brand-core"></span>
+        </span>
+        <span>
+          <span class="eyebrow">STEALTHMAX V2 · PCB V3</span>
+          <span class="brand-name">NEVERMORE</span>
+        </span>
+      </a>
+
+      <div class="header-actions">
+        <button class="quiet-button" id="settingsButton" type="button" aria-haspopup="dialog">
+          Connection
+        </button>
+        <div class="connection-chip" id="connectionChip" data-state="offline">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connectionText">Offline</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard" id="top">
+      <section class="fault-banner" id="faultBanner" role="alert" hidden>
+        <span class="fault-symbol" aria-hidden="true">!</span>
+        <span>
+          <strong>Nevermore fault detected</strong>
+          <small id="faultMessage">Outputs require attention.</small>
+        </span>
+      </section>
+
+      <section class="maintenance-banner" id="maintenanceBanner" role="status" hidden>
+        <span class="maintenance-symbol" aria-hidden="true">M</span>
+        <span>
+          <strong id="maintenanceTitle">SGP40 maintenance active</strong>
+          <small id="maintenanceMessage">Nevermore automation is intentionally paused.</small>
+        </span>
+        <strong class="maintenance-countdown" id="maintenanceCountdown">—</strong>
+      </section>
+
+      <section class="hero-panel panel" aria-labelledby="modeTitle">
+        <div class="hero-copy">
+          <div class="hero-kicker">
+            <span class="status-beacon" id="statusBeacon" data-tone="idle"></span>
+            <span id="profileLabel">LIVE SYSTEM</span>
+          </div>
+          <h1 id="modeTitle">IDLE</h1>
+          <p id="modeDescription">Waiting for the next filtration cycle.</p>
+
+          <div class="hero-flags" aria-label="System flags">
+            <span class="flag" id="autoFlag" data-active="true">AUTO</span>
+            <span class="flag" id="printFlag">PRINT</span>
+            <span class="flag" id="purgeFlag">PURGE</span>
+            <span class="flag" id="latchFlag">COOLING LATCH</span>
+          </div>
+        </div>
+
+        <div class="fan-gauge" id="fanGauge" style="--fan-value: 0">
+          <div class="fan-gauge-inner">
+            <span class="gauge-label">FILTER</span>
+            <strong id="fanPercent">0%</strong>
+            <span id="fanRpm">0 RPM</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="Nevermore live readings">
+        <article class="panel air-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">AIR QUALITY</span>
+              <h2>VOC filtration</h2>
+            </div>
+            <span class="state-pill" id="vocStatePill" data-level="0">CLEAR</span>
+          </div>
+
+          <div class="paired-readings">
+            <div class="reading-card">
+              <span>INLET</span>
+              <strong id="vocIn">—</strong>
+              <small>VOC index</small>
+            </div>
+            <div class="flow-arrow" aria-hidden="true"><span></span></div>
+            <div class="reading-card reading-card-accent">
+              <span>OUTLET</span>
+              <strong id="vocOut">—</strong>
+              <small>VOC index</small>
+            </div>
+          </div>
+
+          <div class="efficiency-row">
+            <div>
+              <span>Measured reduction</span>
+              <strong id="vocDelta">—</strong>
+            </div>
+            <div class="efficiency-value">
+              <strong id="efficiency">—</strong>
+              <span>efficiency</span>
+            </div>
+          </div>
+
+          <div class="threshold-block">
+            <div class="threshold-scale" aria-hidden="true">
+              <span class="threshold-fill" id="vocFill"></span>
+              <span class="threshold-marker warning" id="warningMarker"></span>
+              <span class="threshold-marker high" id="highMarker"></span>
+              <span class="threshold-marker emergency" id="emergencyMarker"></span>
+            </div>
+            <div class="threshold-labels">
+              <span>0</span>
+              <span id="warningLabel">WARN —</span>
+              <span id="highLabel">HIGH —</span>
+              <span id="emergencyLabel">EMERG —</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel thermal-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">THERMAL</span>
+              <h2>Chamber exchange</h2>
+            </div>
+            <span class="state-pill" id="coolingPill" data-level="0">STANDBY</span>
+          </div>
+
+          <div class="paired-readings temperature-readings">
+            <div class="reading-card">
+              <span>INLET</span>
+              <strong><span id="tempIn">—</span><sup>°C</sup></strong>
+              <small>Chamber air</small>
+            </div>
+            <div class="flow-arrow thermal-arrow" aria-hidden="true"><span></span></div>
+            <div class="reading-card reading-card-cool">
+              <span>OUTLET</span>
+              <strong><span id="tempOut">—</span><sup>°C</sup></strong>
+              <small>Conditioned air</small>
+            </div>
+          </div>
+
+          <div class="temperature-delta">
+            <span>Temperature drop</span>
+            <strong id="tempDelta">—°C</strong>
+          </div>
+
+          <div class="hysteresis-card">
+            <div class="hysteresis-heading">
+              <span>Chamber hysteresis</span>
+              <strong id="hysteresisRange">— / —°C</strong>
+            </div>
+            <div class="hysteresis-track">
+              <span class="hysteresis-window"></span>
+              <span class="temperature-position" id="temperaturePosition"></span>
+            </div>
+            <div class="hysteresis-axis">
+              <span id="coolingOffLabel">OFF —°</span>
+              <span id="coolingOnLabel">ON —°</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="systems-grid" aria-label="Nevermore component status">
+        <article class="panel component-panel">
+          <div class="panel-heading compact-heading">
+            <div>
+              <span class="eyebrow">OUTPUTS</span>
+              <h2>Component state</h2>
+            </div>
+          </div>
+
+          <div class="component-list">
+            <div class="component-row">
+              <div class="component-icon fan-icon" id="fanIcon" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+              </div>
+              <div>
+                <strong>Filter fan</strong>
+                <span id="fanComponentText">Stopped</span>
+              </div>
+              <span class="component-state" id="fanComponentState">OFF</span>
+            </div>
+            <div class="component-row">
+              <div class="component-icon uv-icon" aria-hidden="true">UV</div>
+              <div>
+                <strong>UV treatment</strong>
+                <span>Post-filter sanitation</span>
+              </div>
+              <span class="component-state" id="uvComponentState">OFF</span>
+            </div>
+            <div class="component-row">
+              <div class="component-icon peltier-icon" aria-hidden="true">ΔT</div>
+              <div>
+                <strong>Peltier cooling</strong>
+                <span>Active chamber exchange</span>
+              </div>
+              <span class="component-state" id="peltierComponentState">OFF</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel activity-panel">
+          <div class="panel-heading compact-heading">
+            <div>
+              <span class="eyebrow">ACTIVITY</span>
+              <h2>Current cycle</h2>
+            </div>
+          </div>
+
+          <div class="activity-primary">
+            <span>Last transition</span>
+            <strong id="lastAction">NONE</strong>
+            <small id="lastActionClock">No transitions recorded</small>
+          </div>
+
+          <dl class="detail-list">
+            <div><dt>Transitions</dt><dd id="transitionCount">0</dd></div>
+            <div><dt>Print state</dt><dd id="printState">Standby</dd></div>
+            <div><dt>File</dt><dd id="filename">—</dd></div>
+            <div><dt>Data age</dt><dd id="dataAge">—</dd></div>
+          </dl>
+        </article>
+
+        <article class="panel priority-panel">
+          <div class="panel-heading compact-heading">
+            <div>
+              <span class="eyebrow">AUTOMATION</span>
+              <h2>Priority stack</h2>
+            </div>
+          </div>
+          <ol class="priority-stack" id="priorityStack">
+            <li data-mode="FAULT"><span>01</span>Safety</li>
+            <li data-mode="VOC EMERGENCY"><span>02</span>VOC emergency</li>
+            <li data-mode="CHAMBER COOLING"><span>03</span>Chamber cooling</li>
+            <li data-mode="PRINT FILTRATION"><span>04</span>Print filtration</li>
+            <li data-mode="HEAVY VOC"><span>05</span>Heavy VOC</li>
+            <li data-mode="NORMAL FILTRATION"><span>06</span>Normal filtration</li>
+            <li data-mode="IDLE"><span>07</span>Idle</li>
+          </ol>
+        </article>
+      </section>
+
+      <footer class="dashboard-footer">
+        <span>READ-ONLY MONITOR</span>
+        <span id="footerEndpoint">Moonraker not configured</span>
+      </footer>
+    </main>
+
+    <dialog class="settings-dialog" id="settingsDialog">
+      <form method="dialog" id="settingsForm">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">CONNECTION</span>
+            <h2>Moonraker endpoint</h2>
+          </div>
+          <button class="close-button" value="cancel" aria-label="Close connection settings">×</button>
+        </div>
+
+        <p>
+          Use the printer address you normally open for Mainsail or Fluidd. The dashboard subscribes to
+          status only and cannot send G-code or change outputs.
+        </p>
+
+        <label for="endpointInput">Printer address</label>
+        <input
+          id="endpointInput"
+          name="endpoint"
+          type="text"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="http://printer.local"
+        />
+        <small class="field-help">Examples: http://printer.local or http://192.168.1.50</small>
+
+        <div class="dialog-actions">
+          <button class="secondary-button" id="demoButton" type="button">Run demo</button>
+          <button class="primary-button" value="connect" type="submit">Connect</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

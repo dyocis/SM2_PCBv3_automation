@@ -1,0 +1,52 @@
+# Per-printer configuration (may contain serial numbers, CAN UUIDs, or tuning)
+SM2_Local_Hardware.cfg
+**/SM2_Local_Hardware.cfg
+local/
+
+# Klipper and Moonraker generated files
+variables.cfg
+sm2_saved_variables.cfg
+*.log
+*.log.*
+*.bkp
+*.bak
+*.backup
+*.cfg.bak
+*.before-sm2-install
+SM2_Local_Hardware.cfg.uninstalled-*
+printer-*.cfg
+.moonraker.conf.bkp
+
+# Installer backups and temporary files
+backups/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Release output
+dist/
+release/
+*.zip
+*.tar.gz
+SHA256SUMS
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test and coverage caches
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/

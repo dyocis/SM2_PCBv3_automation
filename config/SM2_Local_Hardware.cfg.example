@@ -1,0 +1,163 @@
+#####################################################################
+# Nevermore StealthMax V2 / Isik's Tech PCB v3 local hardware
+# Pin mapping is based on Isik's official SM3.cfg:
+# https://docs.isiks.tech/Nevermore/Firmware-Setup/#klipper-config
+#
+# Copy this file to SM2_Local_Hardware.cfg, then edit it for the
+# individual printer. The installer does this automatically.
+#
+# Do not commit the completed local file. It may contain a unique MCU
+# serial address or CAN UUID and values specific to one machine.
+#####################################################################
+
+#####################################################################
+# MCU CONNECTION — choose USB or CAN, never both
+#####################################################################
+
+[mcu SM]
+serial: /dev/serial/by-id/REPLACE_WITH_YOUR_PCB_SERIAL
+# canbus_uuid: REPLACE_WITH_YOUR_CAN_UUID
+
+#####################################################################
+# USER-ADJUSTABLE SAFETY AND MECHANICAL VALUES
+#####################################################################
+
+[gcode_macro SM2_SETTINGS]
+variable_vent_open_angle: 47
+variable_vent_close_angle: 67
+variable_fan_spinup_seconds: 5
+variable_minimum_safe_rpm: 2000
+variable_peltier_cooldown_seconds: 60
+variable_pcb_max_temp: 70
+variable_mcu_max_temp: 75
+gcode:
+
+#####################################################################
+# DUAL BME280 + SGP40 SENSOR PAIRS
+#
+# Isik's PCB v3 reference mapping uses exhaust on SENSORS1/I2C1 and
+# intake on SENSORS2/I2C2. Swap both devices in a pair if your
+# physical wiring is reversed.
+#
+# Never use these BME280 devices to control a heater. klipper-sgp40
+# changes error handling for compensation sensors.
+#####################################################################
+
+[sgp40]
+
+[temperature_sensor BME_IN]
+sensor_type: BME280
+i2c_address: 119
+i2c_mcu: SM
+i2c_bus: i2c2_PB10_PB11
+
+[temperature_sensor BME_OUT]
+sensor_type: BME280
+i2c_address: 119
+i2c_mcu: SM
+i2c_bus: i2c1_PB8_PB9
+
+[temperature_sensor SGP_IN]
+sensor_type: SGP40
+i2c_mcu: SM
+i2c_bus: i2c2_PB10_PB11
+ref_temp_sensor: bme280 BME_IN
+ref_humidity_sensor: bme280 BME_IN
+sync_with: SGP_OUT
+
+[temperature_sensor SGP_OUT]
+sensor_type: SGP40
+i2c_mcu: SM
+i2c_bus: i2c1_PB8_PB9
+ref_temp_sensor: bme280 BME_OUT
+ref_humidity_sensor: bme280 BME_OUT
+sync_with: SGP_IN
+
+#####################################################################
+# LED RING
+#####################################################################
+
+[neopixel SM_RGB]
+pin: SM:PA0
+# Isik's reference config uses 16. Set this to the number installed.
+chain_count: 16
+color_order: GRB
+initial_RED: 0
+initial_GREEN: 0
+initial_BLUE: 0
+
+#####################################################################
+# FILTER FAN AND TACHOMETER
+#####################################################################
+
+[fan_generic Filter]
+pin: SM:PB14
+tachometer_pin: SM:PB15
+tachometer_ppr: 2
+
+#####################################################################
+# EXHAUST VENT SERVO
+#####################################################################
+
+[servo SM_Vent]
+pin: SM:PD0
+
+#####################################################################
+# UV AND PELTIER OUTPUTS
+#####################################################################
+
+[output_pin uv]
+pin: SM:PA1
+pwm: true
+shutdown_value: 0
+value: 0
+cycle_time: 0.01
+
+[output_pin peltier]
+pin: SM:PD3
+pwm: true
+shutdown_value: 0
+value: 0
+cycle_time: 0.01
+
+#####################################################################
+# PCB AND MCU OVER-TEMPERATURE INPUTS — DO NOT REMOVE
+#####################################################################
+
+[temperature_sensor _SM_PCB]
+sensor_type: Generic 3950
+sensor_pin: SM:PA2
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 100
+
+[temperature_sensor _SM_MCU]
+sensor_type: temperature_mcu
+sensor_mcu: SM
+min_temp: 0
+max_temp: 80
+
+#####################################################################
+# OPTIONAL THERMISTOR PORTS
+#####################################################################
+
+# [temperature_sensor SM_TH1]
+# sensor_type: Generic 3950
+# sensor_pin: SM:PA3
+# pullup_resistor: 4700
+# min_temp: 0
+# max_temp: 100
+
+# [temperature_sensor SM_TH2]
+# sensor_type: Generic 3950
+# sensor_pin: SM:PA4
+# pullup_resistor: 4700
+# min_temp: 0
+# max_temp: 100
+
+# [temperature_sensor SM_TH3]
+# sensor_type: Generic 3950
+# sensor_pin: SM:PA5
+# pullup_resistor: 4700
+# min_temp: 0
+# max_temp: 100
