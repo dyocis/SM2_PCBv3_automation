@@ -38,7 +38,7 @@ usage() {
     printf '%s\n' "  --config-root PATH       Klipper configuration directory"
     printf '%s\n' "  --moonraker-config PATH  moonraker.conf path"
     printf '%s\n' "  --install-dir PATH       Git checkout (default: ~/SM2_PCBv3_automation)"
-    printf '%s\n' "  --project-branch BRANCH  Project branch (default: main; develop is for testing only)"
+    printf '%s\n' "  --project-branch BRANCH  Project branch (default: main; development is for testing only)"
     printf '%s\n' "  --klipper-path PATH      Klipper checkout (default: ~/klipper)"
     printf '%s\n' "  --klipper-service NAME   Klipper systemd service (default: klipper)"
     printf '%s\n' "  --klippy-venv PATH       Klippy virtualenv (default: ~/klippy-env)"

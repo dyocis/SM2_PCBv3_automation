@@ -321,14 +321,14 @@ To also remove this repository checkout:
 
 The recommended release path is:
 
-1. Create a focused feature or fix branch from `develop`.
+1. Create a focused feature or fix branch from `development`.
 2. Run `python3 scripts/validate_repo.py` and `bash -n scripts/*.sh`.
-3. Open a pull request into `develop` and let GitHub Actions validate it.
-4. Test the complete `develop` candidate on the supported hardware.
-5. Merge `develop` into `main` only when the candidate is ready to release.
+3. Open a pull request into `development` and let GitHub Actions validate it.
+4. Test the complete `development` candidate on the supported hardware.
+5. Merge `development` into `main` only when the candidate is ready to release.
 6. Tag the tested `main` commit using semantic versioning, then let the release workflow build the ZIP, checksum, and GitHub Release.
 
-`main` is the stable installation branch, `develop` contains unreleased next-version work, and version tags identify immutable releases. Full setup and release instructions are in [Maintainer setup](docs/MAINTAINER_SETUP.md). Change summaries belong in [CHANGELOG.md](CHANGELOG.md).
+`main` is the stable installation branch, `development` contains unreleased next-version work, and version tags identify immutable releases. Full setup and release instructions are in [Maintainer setup](docs/MAINTAINER_SETUP.md). Change summaries belong in [CHANGELOG.md](CHANGELOG.md).
 
 ## Support boundaries
 

@@ -9,10 +9,10 @@ This remains a personal, best-effort project. A clean workflow makes updates saf
 | Ref | Purpose |
 |---|---|
 | `main` | Stable installation branch and source for supported installation |
-| `develop` | Integration branch for the next unreleased version |
+| `development` | Integration branch for the next unreleased version |
 | `vX.Y.Z` tags | Immutable public releases and the source for GitHub Release archives |
 
-Create normal feature and fix branches from `develop`, and merge them back into `develop`. Merge `develop` into `main` only after the complete candidate has passed validation and attended hardware testing. Tag the tested `main` commit immediately after that release merge.
+Create normal feature and fix branches from `development`, and merge them back into `development`. Merge `development` into `main` only after the complete candidate has passed validation and attended hardware testing. Tag the tested `main` commit immediately after that release merge.
 
 ## 1. Create the repository
 
@@ -90,13 +90,13 @@ In **Settings → General → Features**, enable Issues if you want public repor
 
 `v0.1.0` has already been published. Do not recreate, move, or reuse that tag. Its release notes warn that the configuration requires the Peltier cooler, UV LEDs, and exhaust servo.
 
-`v0.2.0` is the optional-hardware release. If that tag already exists, do not recreate, move, or reuse it. Otherwise, publish it only after the complete `develop` candidate passes validation and attended hardware testing:
+`v0.2.0` is the optional-hardware release. If that tag already exists, do not recreate, move, or reuse it. Otherwise, publish it only after the complete `development` candidate passes validation and attended hardware testing:
 
-1. Open the [`main ← develop` comparison](https://github.com/dyocis/SM2_PCBv3_automation/compare/main...develop).
-2. Create a pull request with `main` as the base and `develop` as the compare branch.
+1. Open the [`main ← development` comparison](https://github.com/dyocis/SM2_PCBv3_automation/compare/main...development).
+2. Create a pull request with `main` as the base and `development` as the compare branch.
 3. Review the complete diff and confirm the release-facing README and changelog are included.
 4. Wait for the `Validate` workflow to pass.
-5. Merge the pull request. Keep the `develop` branch for the next release cycle.
+5. Merge the pull request. Keep the `development` branch for the next release cycle.
 6. Update a local clone to the merged `main` commit, verify it, and create the annotated tag:
 
 ```bash
@@ -134,12 +134,12 @@ For a one-person project, one approving review is optional; requiring it can pre
 
 ## Normal development workflow
 
-Never develop a change directly on a printer's installed `main` checkout. Work in a separate local clone and keep unreleased changes on `develop` or a branch created from it.
+Never develop a change directly on a printer's installed `main` checkout. Work in a separate local clone and keep unreleased changes on `development` or a branch created from it.
 
 ### 1. Start a branch
 
 ```bash
-git checkout develop
+git checkout development
 git pull --ff-only
 git checkout -b feature/short-description
 ```
@@ -183,7 +183,7 @@ git push -u origin feature/short-description
 
 ### 4. Open a pull request
 
-On GitHub, choose **Compare & pull request** and set the base branch to `develop`. Explain:
+On GitHub, choose **Compare & pull request** and set the base branch to `development`. Explain:
 
 - What changed and why
 - Which official hardware was used
@@ -192,11 +192,11 @@ On GitHub, choose **Compare & pull request** and set the base branch to `develop
 - Upgrade instructions, if any
 - Rollback path
 
-Wait for `Validate` to pass, review the diff, then squash-merge or merge the pull request into `develop`.
+Wait for `Validate` to pass, review the diff, then squash-merge or merge the pull request into `development`.
 
 ### 5. Decide whether to release
 
-Not every change merged into `develop` needs an immediate release. Publish when a tested set of changes is useful. Update `CHANGELOG.md`, complete attended hardware testing, then choose the next version:
+Not every change merged into `development` needs an immediate release. Publish when a tested set of changes is useful. Update `CHANGELOG.md`, complete attended hardware testing, then choose the next version:
 
 | Change | Example | Version action |
 |---|---|---|
@@ -204,7 +204,7 @@ Not every change merged into `develop` needs an immediate release. Publish when 
 | Backward-compatible feature | New profile or optional installer flag | `v0.2.0` → `v0.3.0` |
 | Breaking config/hardware behavior | Renamed public macros or incompatible local config | `v0.2.0` → `v1.0.0` or next major |
 
-Promote the tested candidate through a `main ← develop` pull request. After it is merged, update a local `main` checkout and create the annotated tag:
+Promote the tested candidate through a `main ← development` pull request. After it is merged, update a local `main` checkout and create the annotated tag:
 
 ```bash
 git checkout main
