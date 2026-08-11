@@ -32,6 +32,7 @@ The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, hel
 
 ## Requirements
 
+-**THIS RELEASE ASSUMES PELTIER COOLER AND UV LEDS INSTALLED.  IF YOU DO NOT HAVE THESE OPTIONAL ADDONS, DO NOT INSTALL THIS RELEASE.  THE NEXT RELEASE WILL MAKE THESE OPTIONAL.**
 - A Linux Klipper host such as Raspberry Pi OS, MainsailOS, or a KIAUH installation
 - Klipper, Moonraker, Git, Python 3, and `sudo`
 - Nginx for the optional dashboard
