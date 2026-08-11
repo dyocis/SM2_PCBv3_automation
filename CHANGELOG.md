@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0]
+
 ### Added
 
 - Interactive and command-line selection of optional UV lights, exhaust servo, and advanced/beta Peltier hardware.
@@ -27,7 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Known limitations
 
-- This release assumes the Peltier cooler, UV LEDs, and exhaust servo are installed. Users without those optional add-ons should not install `v0.1.0`; optional-hardware support is planned for `v0.2.0`.
+- This release assumes the Peltier cooler, UV LEDs, and exhaust servo are installed. Users without those optional add-ons should not install `v0.1.0`; this limitation is removed in `v0.2.0`.
 
-[Unreleased]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dyocis/SM2_PCBv3_automation/releases/tag/v0.1.0

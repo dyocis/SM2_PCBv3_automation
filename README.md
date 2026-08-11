@@ -2,9 +2,6 @@
 
 Klipper automation and a live Moonraker dashboard for the Nevermore StealthMax V2 using Isik's Tech PCB v3, two BME280 + SGP40 sensor modules, a tachometer fan, and addressable status LEDs. UV lights, the exhaust vent servo, and Peltier cooling are optional and selected during installation.
 
-> [!WARNING]
-> **Development branch:** This is the unreleased `v0.2.0` candidate. Use [`main`](https://github.com/dyocis/SM2_PCBv3_automation) or the [Releases page](https://github.com/dyocis/SM2_PCBv3_automation/releases) for stable installation. Only use `develop` for attended testing with a backup and a clear rollback plan.
-
 > [!IMPORTANT]
 > This is a personal, best-effort project. I intend to continue improving the public files when I can, but I cannot promise ongoing support or a regular update schedule. You are responsible for your own printer, wiring, configuration, safety checks, and any software you install. This project is provided as-is, without warranty; I accept no responsibility for damage, failed prints, downtime, injury, or other issues arising from its installation or use.
 
@@ -59,17 +56,15 @@ First follow Isik's [official firmware and Klipper-config procedure](https://doc
 
 This separates firmware, wiring, connector, sensor, and hardware faults from automation problems. Back up that working configuration. Then comment out or remove its `[include ...SM3.cfg]` line before installing this package. Do **not** load the official test config and this package at the same time; both define the same MCU, sensors, and outputs, so Klipper will report duplicate sections.
 
-## Development test install
+## Installation
 
 SSH to the printer host as the normal Klipper user. Do **not** switch to root.
 
-Stable users should return to the [`main` README](https://github.com/dyocis/SM2_PCBv3_automation#readme). To test this unreleased branch, first review the [`develop` installer source](https://github.com/dyocis/SM2_PCBv3_automation/blob/develop/scripts/install.sh), then run:
+Review the [`main` installer source](https://github.com/dyocis/SM2_PCBv3_automation/blob/main/scripts/install.sh), then run:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/dyocis/SM2_PCBv3_automation/develop/scripts/install.sh)" -- --project-branch develop
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/dyocis/SM2_PCBv3_automation/main/scripts/install.sh)"
 ```
-
-Development-mode installation does not register this project with Moonraker's update manager. Update it manually only after reviewing the latest `develop` changes.
 
 After the official configuration passes those tests and its include is disabled, the installer will:
 
@@ -99,7 +94,7 @@ The filter fan, tachometer, PCB/MCU temperature inputs, two BME280 modules, and 
 Unselected hardware is not defined in Klipper. Its macros become safe no-ops, automatic control does not wait for it, and the dashboard reports **NOT INSTALLED** instead of **OFF**. `NEVERMORE_STATUS` prints the detected capability set after `FIRMWARE_RESTART`.
 
 > [!WARNING]
-> Peltier support is an advanced beta feature. I do not currently have the Peltier hot-side/cold-side thermistors installed on the development machine, so this development version does **not** configure or monitor those thermistors. Thermistor-based Peltier monitoring and protection are planned for a future release. The current airflow, fan-RPM, vent-position, PCB-temperature, MCU-temperature, and cooldown interlocks do not replace direct Peltier thermal monitoring.
+> Peltier support is an advanced beta feature. I do not currently have the Peltier hot-side/cold-side thermistors installed on the development machine, so this release does **not** configure or monitor those thermistors. Thermistor-based Peltier monitoring and protection are planned for a future release. The current airflow, fan-RPM, vent-position, PCB-temperature, MCU-temperature, and cooldown interlocks do not replace direct Peltier thermal monitoring.
 
 The installer will not create a Peltier configuration without also enabling the servo. A manually edited configuration containing `[output_pin peltier]` without `[servo SM_Vent]` is an unsupported combination; startup detection sets a Nevermore fault and refuses Peltier operation.
 
@@ -278,7 +273,7 @@ If the console tells you to run `FIRMWARE_RESTART`, do that before acknowledging
 
 ## Updates and rollback
 
-The stable `main` installer registers a `stable` Git repository updater with Moonraker. A development install made with `--project-branch develop` deliberately skips that registration; update it manually and review the branch diff first. Shared configuration and dashboard files update from Git; `SM2_Local_Hardware.cfg`, its optional-hardware selections, and saved calibration state stay local.
+The installer registers a `stable` Git repository updater with Moonraker. Shared configuration and dashboard files update from tagged releases; `SM2_Local_Hardware.cfg`, its optional-hardware selections, and saved calibration state stay local.
 
 Before every update:
 
@@ -288,13 +283,15 @@ Before every update:
 4. Apply the update from Mainsail/Fluidd.
 5. Check `FIRMWARE_RESTART`, `NEVERMORE_STATUS`, and the individual outputs while attended.
 
-For rollback, open the repository in Moonraker's update manager and use its rollback/recover controls when offered, or use Git from SSH:
+To pin this release, or to return to it after a later update, open the repository in Moonraker's update manager and use its rollback/recover controls when offered, or use Git from SSH:
 
 ```bash
 cd ~/SM2_PCBv3_automation
 git fetch --tags
-git checkout v0.1.0
+git checkout v0.2.0
 ```
+
+The earlier `v0.1.0` release should be used only on machines with the UV LEDs, Peltier cooler, and exhaust servo all installed.
 
 Return to current stable releases with:
 
