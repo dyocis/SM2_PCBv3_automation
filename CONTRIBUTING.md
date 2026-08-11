@@ -10,7 +10,7 @@ Confirm the problem on a tagged release with unmodified shared files. Check your
 
 ## Pull requests
 
-1. Create a focused branch from `develop` and target `develop` with the pull request.
+1. Create a focused branch from `development` and target `development` with the pull request.
 2. Keep printer-specific data out of the shared files.
 3. Update the README and changelog when behavior changes.
 4. Run:
