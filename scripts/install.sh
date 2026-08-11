@@ -138,7 +138,12 @@ detect_config_root() {
         "${HOME}/klipper_config" \
         "${HOME}"/*_data/config; do
         [[ -d "${candidate}" && -f "${candidate}/printer.cfg" ]] || continue
-        candidates+=("${candidate}")
+        local duplicate=0
+        local existing
+        for existing in "${candidates[@]:-}"; do
+            [[ "${existing}" == "${candidate}" ]] && duplicate=1
+        done
+        ((duplicate)) || candidates+=("${candidate}")
     done
     CONFIG_ROOT="$(choose_from "Multiple Klipper configuration directories were found:" "${candidates[@]}")" || true
     [[ -n "${CONFIG_ROOT}" ]] || die "Could not select a Klipper config directory. Re-run with --config-root PATH."

@@ -184,6 +184,14 @@ def validate_configs(errors: list[str]) -> None:
         if flag not in installer:
             fail(errors, f"installer is missing optional-hardware flag: {flag}")
 
+    config_detection = installer.split("detect_config_root() {", 1)[-1].split(
+        "detect_moonraker_config() {", 1
+    )[0]
+    if 'for existing in "${candidates[@]:-}"' not in config_detection:
+        fail(errors, "installer config-directory discovery must deduplicate overlapping paths")
+    if '((duplicate)) || candidates+=("${candidate}")' not in config_detection:
+        fail(errors, "installer config-directory discovery must add only unique paths")
+
 
 def validate_dashboard(errors: list[str]) -> None:
     html = (ROOT / "dashboard/index.html").read_text(encoding="utf-8")
