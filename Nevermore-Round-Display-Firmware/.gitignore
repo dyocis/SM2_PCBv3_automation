@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+include/user_config.h
+
