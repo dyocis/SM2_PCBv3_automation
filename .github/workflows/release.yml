@@ -29,8 +29,11 @@ jobs:
       - name: Run repository checks
         run: |
           bash -n scripts/*.sh
-          node --check dashboard/app.js
+          python3 scripts/test_dashboard_cors.py
+          python3 scripts/test_selective_regeneration.py
           python3 scripts/validate_repo.py
+          npm ci --prefix dashboard
+          npm --prefix dashboard run check
 
       - name: Build release archive
         env:
