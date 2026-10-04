@@ -9,13 +9,12 @@
 
 The artwork remains credited to the Nevermore3D contributors. Preserve this provenance when redistributing the asset.
 
-## StealthMax V2 product render
+## StealthMax V2 product cutout
 
-`stealthmax-v2.png` is an unmodified copy of the product render used in the official StealthMax V2 README.
+`stealthmax-v2.png` uses the user's selected top-view StealthMax V2 reference, supplied on 2026-10-04. The gray exterior background was removed with the built-in image editing tool to produce a transparent PNG for the Media tab. This is an edited derivative, not an unmodified upstream asset.
 
-- Source: <https://github.com/nevermore3d/Stealthmax_V2>
-- Asset: <https://github.com/nevermore3d/Stealthmax_V2/blob/main/Printable_Files/Stealthmax_V2.png>
-- Retrieved: 2026-10-04
-- SHA-256: `21033376d44d74e58e5abe4c817a94e868b0e6bd8b638773f22cc439e7817eda`
+Credit for the StealthMax design and artwork: Nevermore3D / StealthMax V2 contributors. Original reference source URL was not supplied. Preserve this attribution when redistributing.
 
-Credit: Nevermore3D / StealthMax V2 contributors. Preserve this source attribution. The source repository has no root license file; no separate license grant is asserted here.
+- Dimensions: 1286 × 1223
+- Format: RGBA PNG with transparent background
+- SHA-256: `1f0adde2ac1bd771db85c507d57299e44efd699e380faeda1c952092b81683af`
