@@ -32,5 +32,8 @@ jobs:
       - name: Test Moonraker CORS configuration
         run: python3 scripts/test_dashboard_cors.py
 
+      - name: Test selective installer regeneration
+        run: python3 scripts/test_selective_regeneration.py
+
       - name: Validate repository content
         run: python3 scripts/validate_repo.py
