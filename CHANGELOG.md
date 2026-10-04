@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - Compact tabbed dashboard with Live, History, Media, and guarded Controls views.
-- Official Nevermore3D StealthMax V2 artwork with retained source provenance.
+- Official Nevermore3D mark and selected transparent StealthMax V2 artwork with retained source provenance.
 - Local `nevermore-history.service` recorder with 10-second samples, 24-hour retention, restart quarantine, and atomic history writes outside the Git checkout.
 - Runtime tests for the dashboard, history guards, recorder, controls, and Moonraker CORS configuration.
 
@@ -22,6 +22,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Fresh dashboard installs no longer fail their WebSocket connection because the port `7131` origin is missing from Moonraker authorization.
 - Closed exhaust vents now render as `CLOSED` instead of the generic output label `OFF`.
+
+- Fan blades now rotate around the hub while their outer frame stays stationary.
+- Recorder smoke test waits for an actual sample instead of racing the initial empty history write.
+
+### Upgrade
+
+- Existing installations must rerun `scripts/install.sh --skip-dependencies` from the updated `main` checkout while the printer is idle, then hard-refresh the dashboard. This installs the recorder, history route, and CORS integration while preserving local hardware settings and saved data.
 
 ### Safety
 

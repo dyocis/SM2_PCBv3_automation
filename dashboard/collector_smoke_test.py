@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -69,7 +70,7 @@ def main() -> None:
             recorder = Path(__file__).with_name("nevermore_history.py")
             process = subprocess.Popen(
                 [
-                    os.fspath(recorder),
+                    sys.executable, os.fspath(recorder),
                     "--moonraker", f"http://127.0.0.1:{server.server_port}",
                     "--output", os.fspath(output),
                     "--sample-seconds", "0.25",
@@ -79,13 +80,25 @@ def main() -> None:
                     "--stable-samples", "1",
                 ]
             )
-            deadline = time.time() + 5
-            while time.time() < deadline and not output.exists():
-                time.sleep(0.1)
-            process.terminate()
-            process.wait(timeout=5)
+            # The recorder first writes an empty startup/quarantine snapshot.
+            # Wait for telemetry, not merely file creation, before stopping it.
+            payload = None
+            try:
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if output.exists():
+                        candidate = json.loads(output.read_text())
+                        if candidate.get("samples"):
+                            payload = candidate
+                            break
+                    if process.poll() is not None:
+                        raise AssertionError(f"Recorder exited early: {process.returncode}")
+                    time.sleep(0.1)
+                assert payload is not None, "Recorder wrote no samples within 5 seconds"
+            finally:
+                process.terminate()
+                process.wait(timeout=5)
 
-            payload = json.loads(output.read_text())
             assert payload["samples"], "Recorder wrote no samples"
             sample = payload["samples"][-1]
             assert sample["rpm"] == 9640
