@@ -86,10 +86,7 @@ assert(html.includes('<link rel="icon" href="./favicon.svg"'), "Dashboard favico
 assert(html.includes('src="./nevermore3d-mark.jpg"'), "Official Nevermore3D artwork is missing");
 assert(css.includes(".workspace-tabs"), "Compact view tabs are missing");
 assert(css.includes(".sm2-fan"), "StealthMax fan design is missing");
-assert(css.includes(".media-honeycomb"), "StealthMax media-basket design is missing");
-assert(html.includes('class="media-frame-visual"'), "Rounded-octagonal SM2 media frame is missing");
-assert(html.includes('class="media-frame-rail"'), "SM2 red perimeter rail is missing");
-assert(html.includes('class="media-fasteners"'), "SM2 perimeter fasteners are missing");
+assert(html.includes('src="./stealthmax-v2.png"'), "Official StealthMax V2 render is missing");
 assert(css.includes("--sm2-red-deep"), "Red/graphite SM2 palette is missing");
 assert(!css.includes("rotate(45deg) scale(.82)"), "Legacy diamond media housing is still present");
 assert(css.includes("@media (max-width: 620px)"), "Mobile layout rules are missing");
