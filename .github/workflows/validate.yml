@@ -23,5 +23,17 @@ jobs:
       - name: Validate dashboard JavaScript syntax
         run: node --check dashboard/app.js
 
+      - name: Install dashboard test dependencies
+        run: npm ci --prefix dashboard
+
+      - name: Run dashboard tests
+        run: npm --prefix dashboard run check
+
+      - name: Test Moonraker CORS configuration
+        run: python3 scripts/test_dashboard_cors.py
+
+      - name: Test selective installer regeneration
+        run: python3 scripts/test_selective_regeneration.py
+
       - name: Validate repository content
         run: python3 scripts/validate_repo.py

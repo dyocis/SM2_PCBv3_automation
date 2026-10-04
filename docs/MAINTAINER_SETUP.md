@@ -150,8 +150,10 @@ Use `fix/...`, `docs/...`, or `feature/...` names that describe one focused chan
 
 ```bash
 bash -n scripts/*.sh
-node --check dashboard/app.js
+python3 scripts/test_dashboard_cors.py
 python3 scripts/validate_repo.py
+npm ci --prefix dashboard
+npm --prefix dashboard run check
 ```
 
 For config changes, run at least the filter-only, servo-only, UV-only, and all-options installer combinations in a disposable configuration directory. Confirm Peltier selection also enables the servo and that an intentionally edited Peltier-without-servo configuration faults at startup.
@@ -169,6 +171,7 @@ Then test an attended printer in this order, skipping only checks for hardware r
 9. PCB/MCU over-temperature and low-RPM paths de-energize outputs.
 10. Print start/end and material selection behave correctly.
 11. Dashboard and calibration maintenance states render correctly, including `NOT INSTALLED` outputs.
+12. The dashboard connects through port `7131`, its exact origin is accepted by Moonraker, and history survives a browser reload.
 
 Never shorten or bypass physical-safety tests to meet a release date.
 

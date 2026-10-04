@@ -73,6 +73,10 @@ remove_include_block() {
 remove_include_block "${CONFIG_ROOT}/printer.cfg" "[include SM2_PCBv3.cfg]"
 if [[ -n "${MOONRAKER_CONFIG}" ]]; then
     remove_include_block "${MOONRAKER_CONFIG}" "[include ${PROJECT_NAME}/moonraker_update.conf]"
+    cors_helper="${INSTALL_DIR}/scripts/configure_dashboard_cors.py"
+    if [[ -f "${cors_helper}" ]]; then
+        python3 "${cors_helper}" remove "${MOONRAKER_CONFIG}" >/dev/null || warn "Could not remove the installer-owned dashboard CORS entry."
+    fi
 fi
 
 rm -f "${CONFIG_ROOT}/SM2_PCBv3.cfg"
@@ -116,6 +120,9 @@ PY
 fi
 
 if command -v sudo >/dev/null 2>&1 && sudo -v; then
+    sudo systemctl disable --now nevermore-history.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/nevermore-history.service
+    sudo systemctl daemon-reload 2>/dev/null || true
     sudo rm -f /etc/nginx/conf.d/sm2-pcbv3-dashboard.conf
     if command -v nginx >/dev/null 2>&1 && sudo nginx -t; then
         sudo systemctl reload nginx || true

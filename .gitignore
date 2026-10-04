@@ -45,6 +45,8 @@ Thumbs.db
 desktop.ini
 
 # Test and coverage caches
+node_modules/
+dashboard/data/
 .pytest_cache/
 __pycache__/
 *.py[cod]

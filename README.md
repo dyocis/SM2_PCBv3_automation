@@ -26,7 +26,7 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 - Interlocks for airflow, vent position, Peltier cooldown, UV, PCB temperature, and MCU temperature when the related hardware is installed
 - Guarded 24-hour SGP40 clean-air calibration workflow
 - LED status effects through `klipper-led_effect`
-- Standalone live dashboard for Mainsail or Fluidd installations
+- Standalone tabbed dashboard with live status, 24-hour history, media health, and guarded controls
 - Moonraker-managed stable updates
 
 The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, helper macros, directory names, MCU serial, or saved-variable file. Per-printer values live in one local file that is excluded by `.gitignore`.
@@ -76,8 +76,9 @@ After the official configuration passes those tests and its include is disabled,
 6. Create a private local hardware file containing only the selected hardware blocks and link the shared configuration files.
 7. Add `[include SM2_PCBv3.cfg]` to the detected `printer.cfg`.
 8. Register this repository with Moonraker's update manager.
-9. Install the dashboard on port `7131` when Nginx is available.
-10. Add a Mainsail navigation link when Mainsail is detected.
+9. Install the dashboard and rolling-history service on port `7131` when Nginx is available.
+10. Add the exact dashboard origin to Moonraker's CORS list so its WebSocket can connect.
+11. Add a Mainsail navigation link when Mainsail is detected.
 
 Existing local hardware settings are preserved when the installer is run again. Backups named `printer.cfg.before-sm2-install` and `moonraker.conf.before-sm2-install` are created before their first modification.
 
@@ -235,7 +236,9 @@ The Klipper configuration is identical for both interfaces. Only dashboard navig
 | Mainsail | Nginx serves the dashboard at `http://PRINTER_HOST:7131` | Installer merges a `Nevermore` entry into `<config>/.theme/navi.json` without replacing existing entries. Reload Mainsail after installation. |
 | Fluidd | Same Nginx dashboard and URL | Installer does not modify Fluidd UI files. Open or bookmark `http://PRINTER_HOST:7131`. |
 
-The dashboard connects to Moonraker through the local Nginx proxy and stores only the selected endpoint in that browser's local storage. Use the **Connection** button to change it. Add `?demo=1` to the URL to preview simulated states without a printer.
+The dashboard opens on four compact views: **Live**, **History**, **Media**, and **Controls**. Its rolling recorder samples Moonraker locally every 10 seconds, retains 24 hours, and writes `history.json` outside the Git checkout. On the standard MainsailOS layout that file is `~/printer_data/nevermore-dashboard/history.json`.
+
+The browser connects through the local Nginx WebSocket proxy. The installer adds the exact `http://PRINTER_HOST:7131` origin to Moonraker's `[authorization] cors_domains` list without replacing existing entries. It also keeps the selected endpoint in that browser's local storage; use the **Connection** button to change it. Add `?demo=1` to the URL to preview simulated states without a printer.
 
 Custom dashboard ports are supported:
 
@@ -248,6 +251,16 @@ If the printer is reached by an IP address or custom hostname, set the link expl
 ```bash
 ~/SM2_PCBv3_automation/scripts/install.sh --public-host 192.168.1.50
 ```
+
+### Upgrading an earlier dashboard
+
+After updating from `v0.2.x` or an earlier development copy, run the installer once more from the updated checkout. This one-time rerun installs the history service, updates the Nginx `/data/` route, and adds the dashboard origin to Moonraker. Existing local hardware settings and existing CORS entries are preserved.
+
+```bash
+~/SM2_PCBv3_automation/scripts/install.sh --skip-dependencies
+```
+
+Then hard-refresh the dashboard page. If a non-default hostname or port is used, pass the same `--public-host` and `--dashboard-port` values again.
 
 ## SGP40 calibration
 
@@ -281,7 +294,8 @@ Before every update:
 2. Back up the Klipper configuration.
 3. Finish or cancel any active print and SGP40 calibration.
 4. Apply the update from Mainsail/Fluidd.
-5. Check `FIRMWARE_RESTART`, `NEVERMORE_STATUS`, and the individual outputs while attended.
+5. Follow any release-note instruction to rerun the installer when service or Nginx integration changes.
+6. Check `FIRMWARE_RESTART`, `NEVERMORE_STATUS`, and the individual outputs while attended.
 
 To pin this release, or to return to it after a later update, open the repository in Moonraker's update manager and use its rollback/recover controls when offered, or use Git from SSH:
 
@@ -309,7 +323,7 @@ Do not edit linked shared files on the printer; local edits make Git updates fai
 ~/SM2_PCBv3_automation/scripts/uninstall.sh
 ```
 
-The uninstaller removes the generated includes, shared links, dashboard server block, and Mainsail navigation entry. It preserves the local hardware file as a timestamped backup and leaves `klipper-sgp40`, `klipper-led_effect`, and saved calibration data installed.
+The uninstaller removes the generated includes, installer-owned CORS entry, history service, dashboard server block, shared links, and Mainsail navigation entry. It preserves the local hardware file as a timestamped backup and leaves `klipper-sgp40`, `klipper-led_effect`, saved calibration data, and recorded dashboard history installed.
 
 To also remove this repository checkout:
 
@@ -322,7 +336,7 @@ To also remove this repository checkout:
 The recommended release path is:
 
 1. Create a focused feature or fix branch from `development`.
-2. Run `python3 scripts/validate_repo.py` and `bash -n scripts/*.sh`.
+2. Run `python3 scripts/validate_repo.py`, `python3 scripts/test_dashboard_cors.py`, `bash -n scripts/*.sh`, and `npm --prefix dashboard run check`.
 3. Open a pull request into `development` and let GitHub Actions validate it.
 4. Test the complete `development` candidate on the supported hardware.
 5. Merge `development` into `main` only when the candidate is ready to release.
@@ -349,7 +363,7 @@ Released under the [GNU General Public License v3.0](LICENSE). The license's war
 
 This project builds on the work and documentation of:
 
-- [Nevermore Micro / StealthMax](https://github.com/nevermore3d/Nevermore_Micro)
+- [Nevermore Micro](https://github.com/nevermore3d/Nevermore_Micro) and [StealthMax V2](https://github.com/nevermore3d/Stealthmax_V2). The dashboard uses the official Nevermore3D project mark with [source provenance](dashboard/ARTWORK.md).
 - [Isik's Tech Nevermore hardware](https://docs.isiks.tech/Nevermore/Controller/)
 - [klipper-sgp40 by thetic](https://github.com/thetic/klipper-sgp40)
 - [klipper-led_effect by julianschill](https://github.com/julianschill/klipper-led_effect)
