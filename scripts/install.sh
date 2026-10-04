@@ -25,6 +25,7 @@ SKIP_DEPENDENCIES=0
 WITH_UV=-1
 WITH_PELTIER=-1
 WITH_VENT_SERVO=-1
+DASHBOARD_SERVICE_INSTALLED=0
 
 log() { printf '\n[%s] %s\n' "${PROJECT_NAME}" "$*"; }
 warn() { printf '\n[%s] WARNING: %s\n' "${PROJECT_NAME}" "$*" >&2; }
@@ -128,6 +129,13 @@ require_command() {
 require_command git
 require_command python3
 require_command sed
+
+backup_once() {
+    local source="$1"
+    local backup="${source}.before-sm2-install"
+    [[ -f "${source}" ]] || return 0
+    [[ -e "${backup}" ]] || cp -p "${source}" "${backup}"
+}
 
 detect_config_root() {
     [[ -n "${CONFIG_ROOT}" ]] && return
@@ -393,7 +401,7 @@ write_local_config() {
 
     local printer_config="${CONFIG_ROOT}/printer.cfg"
     if ! grep -qsE '^[[:space:]]*\[include[[:space:]]+SM2_PCBv3\.cfg\][[:space:]]*$' "${printer_config}"; then
-        cp -p "${printer_config}" "${printer_config}.before-sm2-install"
+        backup_once "${printer_config}"
         python3 - "${printer_config}" <<'PY'
 import os
 import pathlib
@@ -471,7 +479,7 @@ write_moonraker_updater() {
 
     local include="[include ${PROJECT_NAME}/moonraker_update.conf]"
     if ! grep -Fqs "${include}" "${MOONRAKER_CONFIG}"; then
-        cp -p "${MOONRAKER_CONFIG}" "${MOONRAKER_CONFIG}.before-sm2-install"
+        backup_once "${MOONRAKER_CONFIG}"
         printf '\n# Nevermore StealthMax V2 / PCB v3 updates\n%s\n' "${include}" >>"${MOONRAKER_CONFIG}"
     fi
 }
@@ -491,6 +499,28 @@ install_dashboard() {
         return 0
     fi
 
+    if [[ -z "${PUBLIC_HOST}" ]]; then
+        PUBLIC_HOST="$(hostname -s).local"
+    fi
+    PUBLIC_HOST="${PUBLIC_HOST,,}"
+    [[ "${PUBLIC_HOST}" =~ ^([a-z0-9][a-z0-9._-]*|\[[0-9a-f:.]+\])$ ]] || die "Invalid public host: ${PUBLIC_HOST}"
+    local dashboard_url="http://${PUBLIC_HOST}:${DASHBOARD_PORT}"
+    local dashboard_data_dir
+    dashboard_data_dir="$(dirname "${CONFIG_ROOT}")/nevermore-dashboard"
+    [[ "${INSTALL_DIR}${dashboard_data_dir}" != *[[:space:]]* ]] || die "Dashboard installation paths cannot contain whitespace."
+    mkdir -p "${dashboard_data_dir}"
+    chmod 0755 "${dashboard_data_dir}"
+
+    if [[ -n "${MOONRAKER_CONFIG}" && -f "${MOONRAKER_CONFIG}" ]]; then
+        local cors_helper="${INSTALL_DIR}/scripts/configure_dashboard_cors.py"
+        [[ -f "${cors_helper}" ]] || die "Dashboard CORS helper is missing: ${cors_helper}"
+        backup_once "${MOONRAKER_CONFIG}"
+        python3 "${cors_helper}" add "${MOONRAKER_CONFIG}" "${dashboard_url}" >/dev/null
+        log "Allowed the dashboard origin in Moonraker: ${dashboard_url}"
+    else
+        warn "moonraker.conf was not found; add ${dashboard_url} to [authorization] cors_domains before using the dashboard."
+    fi
+
     local nginx_user="www-data"
     if [[ -r /etc/nginx/nginx.conf ]]; then
         nginx_user="$(awk '$1 == "user" {gsub(/;/, "", $2); print $2; exit}' /etc/nginx/nginx.conf)"
@@ -499,6 +529,9 @@ install_dashboard() {
     if ! sudo -u "${nginx_user}" test -r "${INSTALL_DIR}/dashboard/index.html"; then
         warn "Nginx user '${nginx_user}' cannot read ${INSTALL_DIR}/dashboard. Fix directory traversal permissions or use --skip-dashboard."
         return 0
+    fi
+    if ! sudo -u "${nginx_user}" test -x "${dashboard_data_dir}"; then
+        warn "Nginx user '${nginx_user}' cannot traverse ${dashboard_data_dir}; dashboard history may be unavailable."
     fi
 
     local nginx_config="/etc/nginx/conf.d/sm2-pcbv3-dashboard.conf"
@@ -512,6 +545,10 @@ install_dashboard() {
         printf '    server_name _;\n\n'
         printf '    root %s/dashboard;\n' "${INSTALL_DIR}"
         printf '    index index.html;\n\n'
+        printf '    location /data/ {\n'
+        printf '        alias %s/;\n' "${dashboard_data_dir}"
+        printf '        add_header Cache-Control "no-store";\n'
+        printf '    }\n\n'
         printf '    location / {\n'
         printf '        try_files $uri $uri/ /index.html;\n'
         printf '        add_header Cache-Control "no-cache";\n'
@@ -547,10 +584,49 @@ install_dashboard() {
     [[ -z "${nginx_backup}" ]] || rm -f "${nginx_backup}"
     sudo systemctl reload nginx
 
-    if [[ -z "${PUBLIC_HOST}" ]]; then
-        PUBLIC_HOST="$(hostname -s).local"
+    local service_template="${INSTALL_DIR}/dashboard/nevermore-history.service.template"
+    local service_path="/etc/systemd/system/nevermore-history.service"
+    local service_temp
+    service_temp="$(mktemp)"
+    python3 - \
+        "${service_template}" \
+        "${service_temp}" \
+        "$(id -un)" \
+        "${dashboard_data_dir}" \
+        "${INSTALL_DIR}/dashboard/nevermore_history.py" \
+        "${dashboard_data_dir}/history.json" \
+        "${MOONRAKER_PORT}" <<'PY'
+import pathlib
+import sys
+
+template_path, output_path, user, data_dir, script_path, history_path, port = sys.argv[1:]
+
+def systemd_quote(value):
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+content = pathlib.Path(template_path).read_text(encoding="utf-8")
+replacements = {
+    "__USER__": user,
+    "__DATA_DIR__": data_dir,
+    "__SCRIPT_PATH__": systemd_quote(script_path),
+    "__OUTPUT_PATH__": systemd_quote(history_path),
+    "__MOONRAKER_PORT__": port,
+}
+for marker, value in replacements.items():
+    content = content.replace(marker, value)
+if any(marker in content for marker in replacements):
+    raise SystemExit("unresolved recorder service template marker")
+pathlib.Path(output_path).write_text(content, encoding="utf-8")
+PY
+    sudo install -m 0644 "${service_temp}" "${service_path}"
+    rm -f "${service_temp}"
+    if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl daemon-reload
+        sudo systemctl enable nevermore-history.service
+        DASHBOARD_SERVICE_INSTALLED=1
+    else
+        warn "systemctl is unavailable; enable ${service_path} manually to collect dashboard history."
     fi
-    local dashboard_url="http://${PUBLIC_HOST}:${DASHBOARD_PORT}"
 
     if [[ -d "${HOME}/mainsail" || -d "${CONFIG_ROOT}/.theme" ]]; then
         mkdir -p "${CONFIG_ROOT}/.theme"
@@ -591,6 +667,9 @@ restart_services() {
     if command -v systemctl >/dev/null 2>&1; then
         sudo systemctl restart moonraker 2>/dev/null || warn "Could not restart Moonraker automatically. Restart it from your UI or with systemctl."
         sudo systemctl restart "${KLIPPER_SERVICE}" 2>/dev/null || warn "Could not restart ${KLIPPER_SERVICE}. Restart Klipper after checking the local hardware file."
+        if ((DASHBOARD_SERVICE_INSTALLED)); then
+            sudo systemctl restart nevermore-history.service 2>/dev/null || warn "Could not start the dashboard history recorder. Run: sudo systemctl restart nevermore-history.service"
+        fi
     fi
 }
 

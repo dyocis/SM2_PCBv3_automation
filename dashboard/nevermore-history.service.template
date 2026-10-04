@@ -1,0 +1,17 @@
+[Unit]
+Description=Nevermore StealthMax V2 rolling history recorder
+After=network-online.target moonraker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DATA_DIR__
+ExecStart=/usr/bin/python3 __SCRIPT_PATH__ --moonraker http://127.0.0.1:__MOONRAKER_PORT__ --output __OUTPUT_PATH__ --sample-seconds 10 --write-seconds 60 --retention-hours 24 --restart-quarantine-seconds 90 --stable-samples 3
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

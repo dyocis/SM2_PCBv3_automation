@@ -1,0 +1,13 @@
+{
+  "name": "sm2-pcbv3-dashboard",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Compact Moonraker control, history, and media-health console for Nevermore StealthMax V2 with PCB v3",
+  "scripts": {
+    "check": "node --check app.js && python3 -m py_compile nevermore_history.py && python3 restart_guard_test.py && python3 collector_smoke_test.py && node history_guard_runtime_test.mjs && node control_runtime_test.mjs && node runtime_test.mjs && node validate.mjs",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

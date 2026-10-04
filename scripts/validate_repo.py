@@ -22,12 +22,27 @@ REQUIRED = {
     "config/SM2_Material_Profiles.cfg",
     "config/SM2_Variables.cfg",
     "dashboard/app.js",
+    "dashboard/ARTWORK.md",
+    "dashboard/collector_smoke_test.py",
+    "dashboard/control_runtime_test.mjs",
+    "dashboard/favicon.svg",
+    "dashboard/history_guard_runtime_test.mjs",
     "dashboard/index.html",
+    "dashboard/nevermore3d-mark.jpg",
+    "dashboard/nevermore-history.service.template",
+    "dashboard/nevermore_history.py",
+    "dashboard/package-lock.json",
+    "dashboard/package.json",
+    "dashboard/restart_guard_test.py",
+    "dashboard/runtime_test.mjs",
     "dashboard/styles.css",
+    "dashboard/validate.mjs",
+    "scripts/configure_dashboard_cors.py",
     "scripts/install.sh",
+    "scripts/test_dashboard_cors.py",
     "scripts/uninstall.sh",
 }
-TEXT_SUFFIXES = {".cfg", ".css", ".html", ".js", ".json", ".md", ".py", ".sh", ".txt", ".yml", ".yaml"}
+TEXT_SUFFIXES = {".cfg", ".css", ".html", ".js", ".json", ".md", ".mjs", ".py", ".sh", ".svg", ".txt", ".yml", ".yaml"}
 ALLOWED_EXTERNAL_COMMANDS = {
     "CALIBRATE_SGP40",
     "QUERY_SGP40",
@@ -45,6 +60,7 @@ def text_files() -> list[Path]:
         for path in ROOT.rglob("*")
         if path.is_file()
         and ".git" not in path.parts
+        and "node_modules" not in path.parts
         and path.suffix.lower() in TEXT_SUFFIXES
     )
 
@@ -206,6 +222,62 @@ def validate_dashboard(errors: list[str]) -> None:
     referenced_ids = set(re.findall(r'"([A-Za-z][A-Za-z0-9_-]*)"', declared.group(1)))
     for missing in sorted(referenced_ids - html_ids):
         fail(errors, f"dashboard JavaScript references missing id: {missing}")
+
+    for view in ("live", "history", "media", "controls"):
+        if f'data-view="{view}"' not in html or f'data-view-panel="{view}"' not in html:
+            fail(errors, f"dashboard is missing the {view} tab or panel")
+
+    expected_macros = {
+        "NEVERMORE_MANUAL",
+        "NEVERMORE_FILTER",
+        "NEVERMORE_UV",
+        "NEVERMORE_PELTIER",
+        "NEVERMORE_OFF",
+        "NEVERMORE_AUTO_ENABLE",
+        "NEVERMORE_EMERGENCY_OFF",
+        "NEVERMORE_CLEAR_ERROR",
+        "VENT_OPEN",
+        "VENT_CLOSE",
+        "NEVERMORE_SGP_CALIBRATION_START",
+        "NEVERMORE_SGP_CALIBRATION_CANCEL",
+    }
+    config_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted((ROOT / "config").glob("*.cfg"))
+    )
+    defined_macros = set(
+        re.findall(r"^\s*\[gcode_macro\s+([A-Za-z0-9_]+)]", config_text, re.MULTILINE)
+    )
+    for macro in sorted(expected_macros):
+        if macro not in javascript:
+            fail(errors, f"dashboard is missing guarded macro action: {macro}")
+        if macro not in defined_macros:
+            fail(errors, f"dashboard action has no public macro definition: {macro}")
+    if re.search(r"SET_PIN|SET_FAN_SPEED|printer\.emergency_stop|\bM112\b", javascript):
+        fail(errors, "dashboard contains a direct hardware or printer emergency command")
+
+    installer = (ROOT / "scripts/install.sh").read_text(encoding="utf-8")
+    uninstaller = (ROOT / "scripts/uninstall.sh").read_text(encoding="utf-8")
+    service = (ROOT / "dashboard/nevermore-history.service.template").read_text(encoding="utf-8")
+    for required in (
+        "configure_dashboard_cors.py",
+        "location /data/",
+        "nevermore-history.service",
+        "systemctl restart nevermore-history.service",
+    ):
+        if required not in installer:
+            fail(errors, f"installer is missing dashboard integration: {required}")
+    for required in ("configure_dashboard_cors.py", "disable --now nevermore-history.service"):
+        if required not in uninstaller:
+            fail(errors, f"uninstaller is missing dashboard cleanup: {required}")
+    for marker in (
+        "__USER__",
+        "__DATA_DIR__",
+        "__SCRIPT_PATH__",
+        "__OUTPUT_PATH__",
+        "__MOONRAKER_PORT__",
+    ):
+        if marker not in service:
+            fail(errors, f"recorder service template is missing marker: {marker}")
 
 
 def validate_json(errors: list[str], files: list[Path]) -> None:

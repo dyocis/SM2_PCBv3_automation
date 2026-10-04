@@ -166,7 +166,9 @@ The dashboard is optional. The automatic installer is the recommended way to cre
   --skip-dependencies
 ```
 
-It serves the page at `http://PRINTER_HOST:7131`. Mainsail gets a merged `.theme/navi.json` entry. Fluidd users bookmark the direct URL.
+It serves the tabbed Live/History/Media/Controls page at `http://PRINTER_HOST:7131`, installs and enables `nevermore-history.service`, adds the Nginx `/data/` route, and adds the exact dashboard origin to Moonraker's existing CORS list. Mainsail gets a merged `.theme/navi.json` entry. Fluidd users bookmark the direct URL.
+
+The recorder keeps its rolling 24-hour `history.json` outside the Git checkout. On a standard `~/printer_data/config` layout it is stored in `~/printer_data/nevermore-dashboard/`, so Moonraker's Git updater continues to see a clean repository.
 
 ## 8. Validate before use
 
