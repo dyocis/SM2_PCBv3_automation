@@ -11,8 +11,15 @@ SECTIONS = re.findall(
     r"^\[(?:gcode_macro|delayed_gcode) ([^]]+)\]\s*\n(.*?)(?=^\[|\Z)",
     SOURCE, re.M | re.S,
 )
-MACROS = {name: body.partition("\ngcode:")[2] for name, body in SECTIONS if "\ngcode:" in body}
-JINJA = Environment(undefined=StrictUndefined)
+MACROS = {}
+for name, body in SECTIONS:
+    match = re.search(r"(?m)^gcode:\s*$", body)
+    if match:
+        MACROS[name] = body[match.end():]
+# Klipper gcode_macro uses {expression}, not Jinja's default {{expression}}.
+JINJA = Environment(
+    undefined=StrictUndefined, variable_start_string="{", variable_end_string="}"
+)
 
 
 def make_printer(installed=True, enabled=True, hot=45, cold=30, active=False,
