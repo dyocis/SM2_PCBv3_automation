@@ -18,7 +18,7 @@ JINJA = Environment(undefined=StrictUndefined)
 def make_printer(installed=True, enabled=True, hot=45, cold=30, active=False,
                  pending=False, cooldown=False, hot_min=0, hot_max=80,
                  cold_min=0, cold_max=80):
-    sm = dict(peltier=int(active), peltier_pending_on=int(pending),
+    sm = dict(uv=0, peltier=int(active), peltier_pending_on=int(pending),
               peltier_cooldown_active=int(cooldown), peltier_thermal_fault=0,
               fault=0, vent_open=0, vent_pending_open=0, vent_closed_ready=1,
               sgp40_calibration_active=0, fan_ready=1)
