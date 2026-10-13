@@ -99,6 +99,12 @@ def truthy(value: Any) -> int:
     return int(value is True or value == 1 or value == "1" or value == "true")
 
 
+def optional_thermistor(value: Any) -> float | None:
+    """Retain plausible optional readings without blocking base VOC history."""
+    result = number(value)
+    return result if result is not None and 0 <= result <= 110 else None
+
+
 def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
     sm = status.get("gcode_macro SM_LED_STATE", {})
     fan = status.get("fan_generic Filter", {})
@@ -119,8 +125,8 @@ def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
         "to": number(bme_out_temp.get("temperature", sm.get("temp_out"))),
         # Representative thermistors on the two-module Peltier assembly.
         # Optional installations report -1; store missing data as null.
-        "pth": number(sm.get("peltier_hot_temp")) if (number(sm.get("peltier_hot_temp")) is not None and number(sm.get("peltier_hot_temp")) >= 0) else None,
-        "ptc": number(sm.get("peltier_cold_temp")) if (number(sm.get("peltier_cold_temp")) is not None and number(sm.get("peltier_cold_temp")) >= 0) else None,
+        "pth": optional_thermistor(sm.get("peltier_hot_temp")),
+        "ptc": optional_thermistor(sm.get("peltier_cold_temp")),
         "pi": number(bme_in.get("pressure")),
         "po": number(bme_out.get("pressure")),
         "hi": number(bme_in.get("humidity")),
@@ -191,12 +197,7 @@ def sample_plausibility_error(sample: dict[str, Any]) -> str | None:
     if revision is not None and not 0.0 <= revision <= 1_000_000.0:
         return "SGP40 calibration revision is outside the expected range"
 
-    for key in ("pth", "ptc"):
-        value = number(sample.get(key))
-        if value is not None and not 0.0 <= value <= 120.0:
-            return f"{key} is outside the optional Peltier thermistor range"
-
-    for key in ("pcb", "mcu"):
+     for key in ("pcb", "mcu"):
         value = number(sample.get(key))
         if value is not None and not 1.0 <= value <= 125.0:
             return f"{key} is outside the controller temperature range"
