@@ -73,7 +73,7 @@
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
       "chartRange", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
-      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "peltierHotTemp", "peltierColdTemp", "airflowState",
+      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
       "clearFaultButton", "peltierFaultResetButton", "confirmDialog", "confirmForm", "confirmEyebrow",
       "confirmTitle", "confirmMessage", "confirmAcceptButton", "workspaceTabs",
@@ -331,6 +331,8 @@
       peltierPending: truthy(sm.peltier_pending_on),
       peltierCooldown: truthy(sm.peltier_cooldown_active),
       peltierThermalFault: truthy(sm.peltier_thermal_fault),
+      peltierAutoDemand: truthy(sm.peltier_auto_demand),
+      peltierAutoState: String(sm.peltier_auto_state || "DISABLED").replace(/^"|"$/g, ""),
       // -1 represents unavailable optional thermistors.
       peltierHotTemp: numberOr(sm.peltier_hot_temp) >= 0 ? numberOr(sm.peltier_hot_temp) : null,
       peltierColdTemp: numberOr(sm.peltier_cold_temp) >= 0 ? numberOr(sm.peltier_cold_temp) : null,
@@ -1045,6 +1047,7 @@
     els.mcuTemp.textContent = validNumber(vm.mcuTemp) ? vm.mcuTemp.toFixed(1) + "°C" : "—°C";
     els.peltierHotTemp.textContent = validNumber(vm.peltierHotTemp) ? vm.peltierHotTemp.toFixed(1) + "°C" : "N/A";
     els.peltierColdTemp.textContent = validNumber(vm.peltierColdTemp) ? vm.peltierColdTemp.toFixed(1) + "°C" : "N/A";
+    els.peltierAutoState.textContent = vm.peltierAutoState;
     els.airflowState.textContent = vm.rpm >= MIN_SAFE_RPM ? "Verified" : fanPercent > 0 ? "Starting" : "Stopped";
     els.safetyState.textContent = vm.fault
       ? "FAULT"
