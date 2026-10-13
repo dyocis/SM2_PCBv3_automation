@@ -43,7 +43,7 @@ def build(
         "chamber_cooling_latched": chamber_latched, "voc_state": 0,
         "voc_warning": 120, "voc_high": 220, "voc_emergency": 400,
         "voc_idle_hysteresis": 20, "print_filter": 1,
-        "last_filter_speed": 1, "fan_ready": 1,
+        "last_filter_speed": 1, "fan_ready": 1, "transition_count": 0,
     })
     p["gcode_macro SM2_SETTINGS"].update({
         "peltier_auto_enabled": auto_enabled,
