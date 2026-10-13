@@ -18,6 +18,8 @@ STATUS = {
         "auto_reason": "SGP40 CALIBRATION",
         "uv": 0,
         "peltier": 0,
+        "peltier_hot_temp": 71.2,
+        "peltier_cold_temp": 36.4,
         "vent_open": 0,
         "sgp40_calibration_active": 1,
         "sgp40_calibration_revision": 3,
@@ -107,6 +109,20 @@ def main() -> None:
             assert sample["vent"] == 0
             assert sample["cal"] == 1
             assert sample["sgp"] == 3
+            assert sample["pth"] == 71.2
+            assert sample["ptc"] == 36.4
+            # Optional sensors do not disrupt VOC history if not installed.
+            from nevermore_history import make_sample
+            absent = {
+                **STATUS,
+                "gcode_macro SM_LED_STATE": {
+                    **STATUS["gcode_macro SM_LED_STATE"],
+                    "peltier_hot_temp": -1,
+                    "peltier_cold_temp": -1,
+                },
+            }
+            assert make_sample(absent, 123)["pth"] is None
+            assert make_sample(absent, 123)["ptc"] is None
             assert payload["schema"] == 2
             assert payload["guard"]["state"] == "recording"
             assert payload["lifetime"]["installed_at"] == 1234567890
@@ -115,7 +131,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
 
-    print("Recorder smoke test verified pressure, vent, SGP40 calibration tags, lifetime reset, and atomic output.")
+    print("Recorder smoke test verified optional Peltier telemetry, pressure, vent, SGP40 tags, and atomic output.")
 
 
 if __name__ == "__main__":
