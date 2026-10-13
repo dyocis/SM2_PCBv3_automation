@@ -34,6 +34,9 @@ jobs:
           python3 scripts/validate_repo.py
           npm ci --prefix dashboard
           npm --prefix dashboard run check
+          python3 -m pip install --user Jinja2==3.1.6
+          python3 scripts/test_peltier_thermal.py
+          python3 scripts/test_temperature_auto.py
 
       - name: Build release archive
         env:
