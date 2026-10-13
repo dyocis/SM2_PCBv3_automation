@@ -129,6 +129,26 @@ class PeltierAutoTests(unittest.TestCase):
         self.assertIn("VENT PRIORITY", request)
         self.assertNotIn("NEVERMORE_PELTIER VALUE=1", request)
 
+    def test_cooling_can_start_when_idle_and_voc_clear(self):
+        # Opt-in is explicitly independent of active printing and VOC load.
+        out = render("NEVERMORE_AUTO_PELTIER",
+                     build(print_active=0, voc=4, temp=46), ALLOW=1)
+        self.assertIn("VARIABLE=peltier_auto_demand VALUE=1", out)
+        self.assertIn("NEVERMORE_PELTIER VALUE=1 AUTO=1", out)
+
+    def test_auto_loop_latches_active_thermal_fault(self):
+        p = build(active=1)
+        p["temperature_sensor SM_Peltier_Hot_Side"]["temperature"] = 88
+        out = render("NEVERMORE_AUTO_PELTIER", p, ALLOW=1)
+        self.assertIn("NEVERMORE_PELTIER_THERMAL_TRIP", out)
+        self.assertNotIn("NEVERMORE_PELTIER VALUE=0 AUTO=1", out)
+        self.assertNotIn("NEVERMORE_EMERGENCY_OFF", out)
+        p = build(active=0)
+        p["temperature_sensor SM_Peltier_Hot_Side"]["temperature"] = 88
+        out = render("NEVERMORE_AUTO_PELTIER", p, ALLOW=1)
+        self.assertIn("THERMAL INHIBIT", out)
+        self.assertNotIn("NEVERMORE_PELTIER_THERMAL_TRIP", out)
+
     def test_cooling_stop_does_not_stop_filtration(self):
         output = render("NEVERMORE_AUTO_PELTIER",
                         build(temp=37, demand=1, active=1), ALLOW=1)
