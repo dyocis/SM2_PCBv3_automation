@@ -97,6 +97,17 @@ class PeltierTests(unittest.TestCase):
                           make_printer(installed=False, enabled=False), VALUE=1)
         self.assertIn("SET_PIN PIN=peltier VALUE=1", output)
 
+    def test_latched_thermal_fault_cannot_be_masked_by_auto_start(self):
+        for name in ("NEVERMORE_PELTIER", "NEVERMORE_PELTIER_ENABLE"):
+            with self.subTest(macro=name):
+                p = make_printer(pending=True, hot=81)
+                p["gcode_macro SM_LED_STATE"]["peltier_thermal_fault"] = 1
+                params = dict(VALUE=1, AUTO=1) if name == "NEVERMORE_PELTIER" else {}
+                output = rendered(name, p, **params)
+                self.assertNotIn("SET_PIN PIN=peltier VALUE=1", output)
+                self.assertIn('VARIABLE=peltier_interlock_state VALUE=\'"THERMAL FAULT"\'', output)
+                self.assertNotIn("THERMAL INHIBIT", output)
+
     def test_active_trip_isolated_and_cooled(self):
         output = rendered("NEVERMORE_PELTIER_THERMAL_TRIP",
                           make_printer(active=True), REASON="TEST")
