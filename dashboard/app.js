@@ -64,7 +64,7 @@
       "warningLabel", "highLabel", "emergencyLabel", "coolingPill", "tempIn", "tempOut",
       "tempDelta", "hysteresisRange", "temperaturePosition", "coolingOffLabel", "coolingOnLabel",
       "fanIcon", "fanComponentText", "fanComponentState", "uvComponentState",
-      "peltierComponentState", "peltierInterlockText", "ventIcon", "ventComponentState", "lastAction", "lastActionClock", "transitionCount", "printState",
+      "peltierComponentState", "peltierInterlockText", "peltierThermalReadout", "ventIcon", "ventComponentState", "lastAction", "lastActionClock", "transitionCount", "printState",
       "filename", "dataAge", "priorityStack", "footerEndpoint",
       "mediaHealthDial", "mediaHealthPill", "mediaHealthSummary", "restrictionState",
       "pressureDrop", "captureState", "captureTrend", "mediaRuntime", "mediaInstalled",
@@ -73,9 +73,9 @@
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
       "chartRange", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
-      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "airflowState",
+      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
-      "clearFaultButton", "confirmDialog", "confirmForm", "confirmEyebrow",
+      "clearFaultButton", "peltierFaultResetButton", "confirmDialog", "confirmForm", "confirmEyebrow",
       "confirmTitle", "confirmMessage", "confirmAcceptButton", "workspaceTabs",
     ].map((id) => [id, $(id)])
   );
@@ -330,6 +330,12 @@
       ventPendingOpen: truthy(sm.vent_pending_open),
       peltierPending: truthy(sm.peltier_pending_on),
       peltierCooldown: truthy(sm.peltier_cooldown_active),
+      peltierThermalFault: truthy(sm.peltier_thermal_fault),
+      peltierAutoDemand: truthy(sm.peltier_auto_demand),
+      peltierAutoState: String(sm.peltier_auto_state || "DISABLED").replace(/^"|"$/g, ""),
+      // -1 represents unavailable optional thermistors.
+      peltierHotTemp: numberOr(sm.peltier_hot_temp) >= 0 ? numberOr(sm.peltier_hot_temp) : null,
+      peltierColdTemp: numberOr(sm.peltier_cold_temp) >= 0 ? numberOr(sm.peltier_cold_temp) : null,
       peltierInterlock: String(sm.peltier_interlock_state || "READY").replace(/^"|"$/g, ""),
       sgpCalibrationActive: truthy(sm.sgp40_calibration_active),
       sgpCalibrationHold: truthy(sm.sgp40_calibration_hold),
@@ -387,14 +393,14 @@
     setFlag(els.purgeFlag, vm.purgeActive);
     setFlag(els.latchFlag, vm.chamberLatched);
     setFlag(els.ventFlag, vm.ventOpen);
-    setFlag(els.interlockFlag, vm.peltierCooldown || vm.peltierPending);
+    setFlag(els.interlockFlag, vm.peltierThermalFault || vm.peltierCooldown || vm.peltierPending);
     setFlag(els.sgpCalibrationFlag, vm.sgpCalibrationActive || vm.sgpCalibrationHold);
     els.sgpCalibrationFlag.textContent = vm.sgpCalibrationActive
       ? "SGP40 " + vm.sgpCalibrationPhase
       : vm.sgpCalibrationHold && vm.sgpCalibrationPhase !== "IDLE"
         ? "SGP40 " + vm.sgpCalibrationPhase
         : "SGP40 CAL";
-    els.interlockFlag.textContent = vm.peltierCooldown
+    els.interlockFlag.textContent = vm.peltierThermalFault ? "PELTIER THERMAL FAULT" : vm.peltierCooldown
       ? "PELTIER COOLDOWN"
       : vm.peltierPending ? "PELTIER WAIT" : "PELTIER INTERLOCK";
 
@@ -439,16 +445,17 @@
     setComponent(els.fanComponentState, fanPercent > 0, `${fanPercent}%`);
     setComponent(els.uvComponentState, vm.uv);
     setComponent(els.peltierComponentState, vm.peltier);
-    if (vm.peltierCooldown || vm.peltierPending) {
-      els.peltierComponentState.textContent = vm.peltierCooldown ? "COOLDOWN" : "WAITING";
+    if (vm.peltierThermalFault || vm.peltierCooldown || vm.peltierPending) {
+      els.peltierComponentState.textContent = vm.peltierThermalFault ? "THERMAL FAULT" : vm.peltierCooldown ? "COOLDOWN" : "WAITING";
       els.peltierComponentState.classList.remove("is-active");
       els.peltierComponentState.classList.add("is-pending");
     } else {
       els.peltierComponentState.classList.remove("is-pending");
     }
-    els.peltierInterlockText.textContent = vm.peltierInterlock === "READY"
-      ? "Vent and airflow interlocked"
-      : vm.peltierInterlock;
+    els.peltierInterlockText.textContent = vm.peltierThermalFault
+      ? "THERMAL FAULT — Peltier isolated"
+      : vm.peltierInterlock === "READY" ? "Vent and airflow interlocked" : vm.peltierInterlock;
+    els.peltierThermalReadout.textContent = `Hot ${validNumber(vm.peltierHotTemp) ? formatDecimal(vm.peltierHotTemp) + "°C" : "N/A"} · Cold ${validNumber(vm.peltierColdTemp) ? formatDecimal(vm.peltierColdTemp) + "°C" : "N/A"}`;
     els.ventComponentState.textContent = vm.ventOpen ? "OPEN" : "CLOSED";
     els.ventComponentState.classList.toggle("is-active", vm.ventOpen);
     els.fanIcon.classList.toggle("is-running", fanPercent > 0);
@@ -741,7 +748,7 @@
   function sanitizeHistoryPoint(point) {
     if (!point || !Number.isFinite(Number(point.t))) return null;
     const clean = { t: Number(point.t), mode: String(point.mode || "") };
-    ["vi", "vo", "ti", "to", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
+    ["vi", "vo", "ti", "to", "pth", "ptc", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
       const raw = point[key];
       const value = Number(raw);
       clean[key] = raw !== null && raw !== "" && Number.isFinite(value) ? value : null;
@@ -821,6 +828,8 @@
         vo: vm.vocOut,
         ti: vm.tempIn,
         to: vm.tempOut,
+        pth: vm.peltierHotTemp,
+        ptc: vm.peltierColdTemp,
         pi: vm.pressureIn,
         po: vm.pressureOut,
         hi: vm.humidityIn,
@@ -858,6 +867,8 @@
       vo: vm.vocOut,
       ti: vm.tempIn,
       to: vm.tempOut,
+      pth: vm.peltierHotTemp,
+      ptc: vm.peltierColdTemp,
       pi: vm.pressureIn,
       po: vm.pressureOut,
       hi: vm.humidityIn,
@@ -1023,7 +1034,7 @@
     els.controlFanPercent.textContent = fanPercent + "%";
     els.controlFanRpm.textContent = formatInteger(vm.rpm) + " RPM";
     els.uvControlState.textContent = vm.uv ? "ON" : "OFF";
-    els.peltierControlState.textContent = vm.peltier
+    els.peltierControlState.textContent = vm.peltierThermalFault ? "FAULT" : vm.peltier
       ? "ON"
       : vm.peltierCooldown ? "COOLDOWN" : vm.peltierPending ? "WAITING" : "OFF";
     els.ventControlState.textContent = vm.ventOpen ? "OPEN" : "CLOSED";
@@ -1034,9 +1045,13 @@
 
     els.pcbTemp.textContent = validNumber(vm.pcbTemp) ? vm.pcbTemp.toFixed(1) + "°C" : "—°C";
     els.mcuTemp.textContent = validNumber(vm.mcuTemp) ? vm.mcuTemp.toFixed(1) + "°C" : "—°C";
+    els.peltierHotTemp.textContent = validNumber(vm.peltierHotTemp) ? vm.peltierHotTemp.toFixed(1) + "°C" : "N/A";
+    els.peltierColdTemp.textContent = validNumber(vm.peltierColdTemp) ? vm.peltierColdTemp.toFixed(1) + "°C" : "N/A";
+    els.peltierAutoState.textContent = vm.peltierAutoState;
     els.airflowState.textContent = vm.rpm >= MIN_SAFE_RPM ? "Verified" : fanPercent > 0 ? "Starting" : "Stopped";
     els.safetyState.textContent = vm.fault
       ? "FAULT"
+      : vm.peltierThermalFault ? "PELTIER FAULT"
       : vm.peltierCooldown ? "COOLDOWN" : vm.peltierPending ? "INTERLOCK WAIT"
         : vm.rpm >= MIN_SAFE_RPM || (!vm.uv && !vm.peltier) ? "NOMINAL" : "CHECK AIRFLOW";
 
@@ -1044,7 +1059,8 @@
     document.querySelectorAll("[data-action]").forEach((button) => {
       const emergency = button.dataset.action === "emergency-off";
       const baselineRestartBlock = button.dataset.action === "resume-auto" && vm.sgpCalibrationResetApplied;
-      button.disabled = !controlsAvailable || (state.controlsLocked && !emergency) || (vm.sgpCalibrationActive && !emergency) || baselineRestartBlock;
+      button.disabled = !controlsAvailable || (state.controlsLocked && !emergency) || (vm.sgpCalibrationActive && !emergency) || baselineRestartBlock ||
+        (button.dataset.action === "peltier-toggle" && vm.peltierThermalFault);
     });
     els.controlStatus.textContent = state.controlPending
       ? "Applying command…"
@@ -1056,6 +1072,7 @@
     els.controlLockButton.dataset.locked = String(state.controlsLocked);
     els.controlLockButton.querySelector("strong").textContent = state.controlsLocked ? "LOCKED" : "UNLOCKED";
     els.clearFaultButton.hidden = !vm.fault;
+    els.peltierFaultResetButton.hidden = !vm.peltierThermalFault;
 
     els.recorderState.textContent = state.historySource === "pi" ? "Pi recorder" : "Browser history";
     els.recorderState.dataset.state = state.historySource;
@@ -1120,6 +1137,7 @@
     const start = end - state.historyMinutes * 60 * 1_000;
     const samples = state.history.filter((point) => point.t >= start && point.t <= end);
     els.chartEmpty.hidden = samples.length >= 2;
+    els.chartEmpty.textContent = "Collecting history…";
     els.chartLegend.replaceChildren();
     ctx.clearRect(0, 0, rect.width, rect.height);
     if (samples.length < 2) return;
@@ -1127,7 +1145,13 @@
     const definition = chartDefinition(state.historyMetric, samples);
     const values = definition.series.flatMap((series) => series.values.filter(validNumber));
     if (definition.thresholds) values.push(...definition.thresholds.map((item) => item.value).filter(validNumber));
-    if (!values.length) return;
+    if (!values.length) {
+      els.chartEmpty.hidden = false;
+      els.chartEmpty.textContent = state.historyMetric === "peltier"
+        ? "Peltier thermistor history unavailable (optional sensors)."
+        : "No valid history for this metric.";
+      return;
+    }
 
     let min = Math.min(...values);
     let max = Math.max(...values);
@@ -1236,6 +1260,16 @@
         thresholds: [{ value: vm.chamberTarget, color: "#f5b942" }],
       };
     }
+    if (metric === "peltier") {
+      return {
+        series: [
+          { label: "Peltier hot °C", color: "#ff7954", values: samples.map((point) => point.pth) },
+          { label: "Peltier cold °C", color: "#45d8ff", values: samples.map((point) => point.ptc) },
+          { label: "Intake °C", color: "#f5b942", values: samples.map((point) => point.ti) },
+        ],
+        thresholds: [],
+      };
+    }
     if (metric === "pressure") {
       return {
         series: [
@@ -1264,7 +1298,7 @@
 
   function formatChartValue(value, metric) {
     if (!validNumber(value)) return "—";
-    if (metric === "temperature") return value.toFixed(1) + "°";
+    if (metric === "temperature" || metric === "peltier") return value.toFixed(1) + "°";
     if (metric === "pressure") return value.toFixed(1) + " Pa";
     return Math.round(value).toString();
   }
@@ -1373,7 +1407,13 @@
   async function handleControlAction(action) {
     const vm = state.vm || buildViewModel();
     if (action === "uv-toggle" && !vm.uv) return guardedOutputOn("uv");
-    if (action === "peltier-toggle" && !vm.peltier && !vm.peltierPending) return guardedOutputOn("peltier");
+    if (action === "peltier-toggle" && !vm.peltier && !vm.peltierPending) {
+      if (vm.peltierThermalFault) {
+        showToast("Reset the Peltier thermal latch after inspecting its cause.");
+        return;
+      }
+      return guardedOutputOn("peltier");
+    }
 
     const activePrintWarning = vm.printActive
       ? " This will override automatic filtration during the active print."
@@ -1420,6 +1460,12 @@
         title: "Turn all Nevermore outputs off?",
         message: "UV and Peltier will turn off before the Filter fan, and the exhaust vent will close. Nevermore will remain in manual mode.",
         script: "NEVERMORE_MANUAL\nNEVERMORE_OFF",
+        danger: true,
+      },
+      "peltier-fault-reset": {
+        title: "Reset the Peltier thermal fault?",
+        message: "The Peltier must be off and cooldown complete. This clears only the Peltier thermal latch and cannot override hardware safety.",
+        script: "NEVERMORE_PELTIER_THERMAL_RESET",
         danger: true,
       },
       "clear-fault": {

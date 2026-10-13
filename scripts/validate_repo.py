@@ -156,9 +156,19 @@ def validate_configs(errors: list[str]) -> None:
             fail(errors, f"undefined delayed_gcode ID: {delayed_id}")
 
     object_reference = re.compile(r'printer\["([^"]+)"\]')
+    optional_thermistor_references = {
+        "temperature_sensor SM_Peltier_Hot_Side",
+        "temperature_sensor SM_Peltier_Cold_Side",
+    }
     for object_name in sorted(set(object_reference.findall(all_content))):
-        if object_name.lower() not in defined_sections:
-            fail(errors, f"undefined Klipper object reference: {object_name}")
+        if object_name.lower() in defined_sections:
+            continue
+        # These sensors are intentionally not defined in the public default.
+        # Klipper runtime guards must verify optional objects before reading.
+        if (object_name in optional_thermistor_references
+                and f'"{object_name}" in printer' in all_content):
+            continue
+        fail(errors, f"undefined Klipper object reference: {object_name}")
 
     local_example = (ROOT / "config/SM2_Local_Hardware.cfg.example").read_text(encoding="utf-8")
     if "REPLACE_WITH_YOUR_PCB_SERIAL" not in local_example:

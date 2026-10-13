@@ -95,7 +95,59 @@ The filter fan, tachometer, PCB/MCU temperature inputs, two BME280 modules, and 
 Unselected hardware is not defined in Klipper. Its macros become safe no-ops, automatic control does not wait for it, and the dashboard reports **NOT INSTALLED** instead of **OFF**. `NEVERMORE_STATUS` prints the detected capability set after `FIRMWARE_RESTART`.
 
 > [!WARNING]
-> Peltier support is an advanced beta feature. I do not currently have the Peltier hot-side/cold-side thermistors installed on the development machine, so this release does **not** configure or monitor those thermistors. Thermistor-based Peltier monitoring and protection are planned for a future release. The current airflow, fan-RPM, vent-position, PCB-temperature, MCU-temperature, and cooldown interlocks do not replace direct Peltier thermal monitoring.
+> Peltier support is an advanced beta feature. Optional hot-side and cold-side temperature telemetry is available when Klipper sensors named `SM_Peltier_Hot_Side` and `SM_Peltier_Cold_Side` are configured. Both readings are recorded continuously, including while the Peltier is off. Temperature-limit **enforcement is disabled by default**, and no assumed thermal limits are safe for every Peltier module or high-temperature chamber. Existing fan-RPM, vent, PCB/MCU, and cooldown interlocks remain active independently.
+
+### Optional Peltier thermistor integration (development)
+
+For installed thermistors, define one representative hot-side sensor and one representative cold-side sensor in your private `SM2_Local_Hardware.cfg`. The software reads those names and does not require per-module electrical testing after installation:
+
+```ini
+[temperature_sensor SM_Peltier_Hot_Side]
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
+sensor_pin: SM:PA3
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 100
+
+[temperature_sensor SM_Peltier_Cold_Side]
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
+sensor_pin: SM:PA4
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 100
+```
+
+These names and pins are an example, **not** a universal wiring assignment. Leave the sensors undefined when absent; the dashboard displays `N/A` without blocking filtration. Live Peltier temperatures are reported through `NEVERMORE_STATUS`, the dashboard Controls view, and the optional Peltier history chart.
+
+Thermal protection is independently opt-in in the existing `[gcode_macro SM2_SETTINGS]` section. The sample thresholds in `SM2_Local_Hardware.cfg.example` are **placeholders only**, not certified TEC1-12703 ratings. Set `variable_peltier_thermal_enabled: 1` only after suitable thresholds have been established for the actual hardware and chamber environment. When enabled, missing thermistors block Peltier activation, while overtemperature limits cause a **Peltier-only** latched fault only when energized; basic filtration continues. The dedicated `NEVERMORE_PELTIER_THERMAL_RESET` macro clears that latch after cooldown and investigation.
+
+After a software update, use `FIRMWARE_RESTART` and `NEVERMORE_STATUS` to verify that expected temperatures are displayed. Physical/electrical testing belongs in the initial bench build, not routine end-user deployment.
+
+### Optional temperature-driven Peltier automation (development)
+
+**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Chamber ventilation and VOC emergency exhaust take precedence: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
+
+The public installer leaves automatic Peltier cooling **off by default**. Users may opt in by setting the following inside the preserved, local `[gcode_macro SM2_SETTINGS]` section after establishing suitable module-specific thermal limits:
+
+```ini
+# Opt-in; do not enable before validating Peltier temperature safety settings
+variable_peltier_auto_enabled: 0
+# Illustrative *air-temperature* control values (not TEC thermal ratings)
+variable_peltier_auto_on_temp: 45
+variable_peltier_auto_off_temp: 40
+```
+
+For automatic cooling to operate, `variable_peltier_auto_enabled: 1` **and** `variable_peltier_thermal_enabled: 1` must both be configured, hot/cold thermistors must be present, both current thermistor readings must be inside valid configured thermal limits, and the Peltier/vent hardware must be installed. This explicitly prevents users from accidentally enabling automated cooling with the provisional 60°C thermal cutoff. The ON temperature must exceed the OFF temperature to provide hysteresis.
+
+At or above the ON air temperature, while the exhaust is closed and allowed, the automation may request Peltier cooling. It requests OFF at or below the OFF air temperature. While Peltier is running, pending, or in cooldown, normal fan requests cannot reduce the fan below full speed. When the Peltier stops after a temperature request, the fan completes the configured cooldown without disabling UV or VOC filtration.
+
+The `NEVERMORE_STATUS` command prints `PELTIER AUTO STATE` and `DEMAND`. The Controls dashboard displays a separate "Cooler auto" status. This feature does **not** alter manually commanded Peltier operation and never bypasses its existing physical or software interlocks.
+
+**After installation:** Use the live status, dashboard and history to confirm operation. No post-install electrical testing, thermistor relocation, enclosure opening, or deliberate overheating is part of the update procedure. The optional UV LED thermistor and its independent UV-only protection are tracked separately in [issue #8](https://github.com/dyocis/SM2_PCBv3_automation/issues/8).
+
+
 
 The installer will not create a Peltier configuration without also enabling the servo. A manually edited configuration containing `[output_pin peltier]` without `[servo SM_Vent]` is an unsupported combination; startup detection sets a Nevermore fault and refuses Peltier operation.
 
@@ -184,7 +236,7 @@ Verify all of the following against the official PCB v3 documentation and your m
 - PCB and MCU maximum temperatures
 - Peltier cooldown time
 
-The supplied PCB v3 pin map is a starting point, not permission to skip verification. Test each installed output with the printer attended. Keep the Peltier and UV disconnected until fan RPM, vent direction, and emergency shutdown behavior have been confirmed. Do not treat the current Peltier beta support as thermistor-protected.
+The supplied PCB v3 pin map is a starting point, not permission to skip verification. Complete wiring, current/voltage, thermistor placement, and optional-output tests **on the bench before enclosing the assembly inside a printer**. After installation, the software's expected validation path is read-only sensor/status checks and Klipper macro tests; users should not need to reopen the printer for routine software upgrades. Thermal-limit enforcement requires a separately verified, hardware-appropriate operating limit.
 
 Then run in the Mainsail/Fluidd console:
 

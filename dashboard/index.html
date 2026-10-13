@@ -253,6 +253,7 @@
             <div class="segmented-control" id="chartMetric" aria-label="Chart metric">
               <button class="is-active" type="button" data-metric="voc">VOC</button>
               <button type="button" data-metric="temperature">Temperature</button>
+              <button type="button" data-metric="peltier">Peltier</button>
               <button type="button" data-metric="pressure">Pressure</button>
             </div>
             <div class="segmented-control compact" id="chartRange" aria-label="Chart time range">
@@ -342,6 +343,9 @@
               <dl>
                 <div><dt>PCB</dt><dd id="pcbTemp">—°C</dd></div>
                 <div><dt>MCU</dt><dd id="mcuTemp">—°C</dd></div>
+                <div><dt>Peltier hot</dt><dd id="peltierHotTemp">N/A</dd></div>
+                <div><dt>Peltier cold</dt><dd id="peltierColdTemp">N/A</dd></div>
+                <div><dt>Cooler auto</dt><dd id="peltierAutoState">DISABLED</dd></div>
                 <div><dt>Airflow</dt><dd id="airflowState">Stopped</dd></div>
               </dl>
             </div>
@@ -352,6 +356,7 @@
             </div>
             <button class="sgp-calibration-button help-target" id="sgpCalibrationButton" type="button" data-help="Start or cancel the unattended 24-hour clean-air calibration for both SGP40 sensors.">Calibrate SGP40 sensors</button>
             <button class="all-off-button help-target" type="button" data-action="all-off" data-help="Stop UV and Peltier, close the vent, and stop the Filter fan after any required Peltier cooldown. Automation remains paused.">All outputs off</button>
+            <button class="fault-clear-button help-target" id="peltierFaultResetButton" type="button" data-action="peltier-fault-reset" data-help="Clear the Peltier-only thermal latch after inspecting its cause. This does not clear a global Nevermore fault." hidden>Reset Peltier fault</button>
             <button class="fault-clear-button help-target" id="clearFaultButton" type="button" data-action="clear-fault" data-help="Clear the software fault latch only after the airflow or temperature problem has been corrected." hidden>Clear fault latch</button>
             <button class="emergency-button help-target" type="button" data-action="emergency-off" data-help="Immediately stop UV and Peltier, close the vent, latch a fault, and run a 60-second full-fan safety cooldown.">
               <span></span>Emergency off
@@ -397,6 +402,7 @@
               <div>
                 <strong>Peltier cooling</strong>
                 <span id="peltierInterlockText">Vent and airflow interlocked</span>
+                <span id="peltierThermalReadout">Hot N/A · Cold N/A</span>
               </div>
               <span class="component-state" id="peltierComponentState">OFF</span>
             </div>
