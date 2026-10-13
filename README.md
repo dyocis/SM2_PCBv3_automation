@@ -103,14 +103,16 @@ For installed thermistors, define one representative hot-side sensor and one rep
 
 ```ini
 [temperature_sensor SM_Peltier_Hot_Side]
-sensor_type: Generic 3950  # Replace with the actual bench-verified sensor type
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
 sensor_pin: SM:PA3
 pullup_resistor: 4700
 min_temp: 0
 max_temp: 100
 
 [temperature_sensor SM_Peltier_Cold_Side]
-sensor_type: Generic 3950  # Replace with the actual bench-verified sensor type
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
 sensor_pin: SM:PA4
 pullup_resistor: 4700
 min_temp: 0
