@@ -95,7 +95,35 @@ The filter fan, tachometer, PCB/MCU temperature inputs, two BME280 modules, and 
 Unselected hardware is not defined in Klipper. Its macros become safe no-ops, automatic control does not wait for it, and the dashboard reports **NOT INSTALLED** instead of **OFF**. `NEVERMORE_STATUS` prints the detected capability set after `FIRMWARE_RESTART`.
 
 > [!WARNING]
-> Peltier support is an advanced beta feature. I do not currently have the Peltier hot-side/cold-side thermistors installed on the development machine, so this release does **not** configure or monitor those thermistors. Thermistor-based Peltier monitoring and protection are planned for a future release. The current airflow, fan-RPM, vent-position, PCB-temperature, MCU-temperature, and cooldown interlocks do not replace direct Peltier thermal monitoring.
+> Peltier support is an advanced beta feature. Optional hot-side and cold-side temperature telemetry is available when Klipper sensors named `SM_Peltier_Hot_Side` and `SM_Peltier_Cold_Side` are configured. Both readings are recorded continuously, including while the Peltier is off. Temperature-limit **enforcement is disabled by default**, and no assumed thermal limits are safe for every Peltier module or high-temperature chamber. Existing fan-RPM, vent, PCB/MCU, and cooldown interlocks remain active independently.
+
+### Optional Peltier thermistor integration (development)
+
+For installed thermistors, define one representative hot-side sensor and one representative cold-side sensor in your private `SM2_Local_Hardware.cfg`. The software reads those names and does not require per-module electrical testing after installation:
+
+```ini
+[temperature_sensor SM_Peltier_Hot_Side]
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
+sensor_pin: SM:PA3
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 100
+
+[temperature_sensor SM_Peltier_Cold_Side]
+# Replace the example type with your bench-verified thermistor type.
+sensor_type: Generic 3950
+sensor_pin: SM:PA4
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 100
+```
+
+These names and pins are an example, **not** a universal wiring assignment. Leave the sensors undefined when absent; the dashboard displays `N/A` without blocking filtration. Live Peltier temperatures are reported through `NEVERMORE_STATUS`, the dashboard Controls view, and the optional Peltier history chart.
+
+Thermal protection is independently opt-in in the existing `[gcode_macro SM2_SETTINGS]` section. The sample thresholds in `SM2_Local_Hardware.cfg.example` are **placeholders only**, not certified TEC1-12703 ratings. Set `variable_peltier_thermal_enabled: 1` only after suitable thresholds have been established for the actual hardware and chamber environment. When enabled, missing thermistors block Peltier activation, while overtemperature limits cause a **Peltier-only** latched fault only when energized; basic filtration continues. The dedicated `NEVERMORE_PELTIER_THERMAL_RESET` macro clears that latch after cooldown and investigation.
+
+After a software update, use `FIRMWARE_RESTART` and `NEVERMORE_STATUS` to verify that expected temperatures are displayed. Physical/electrical testing belongs in the initial bench build, not routine end-user deployment.
 
 The installer will not create a Peltier configuration without also enabling the servo. A manually edited configuration containing `[output_pin peltier]` without `[servo SM_Vent]` is an unsupported combination; startup detection sets a Nevermore fault and refuses Peltier operation.
 
@@ -184,7 +212,7 @@ Verify all of the following against the official PCB v3 documentation and your m
 - PCB and MCU maximum temperatures
 - Peltier cooldown time
 
-The supplied PCB v3 pin map is a starting point, not permission to skip verification. Test each installed output with the printer attended. Keep the Peltier and UV disconnected until fan RPM, vent direction, and emergency shutdown behavior have been confirmed. Do not treat the current Peltier beta support as thermistor-protected.
+The supplied PCB v3 pin map is a starting point, not permission to skip verification. Complete wiring, current/voltage, thermistor placement, and optional-output tests **on the bench before enclosing the assembly inside a printer**. After installation, the software's expected validation path is read-only sensor/status checks and Klipper macro tests; users should not need to reopen the printer for routine software upgrades. Thermal-limit enforcement requires a separately verified, hardware-appropriate operating limit.
 
 Then run in the Mainsail/Fluidd console:
 

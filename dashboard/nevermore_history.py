@@ -99,6 +99,12 @@ def truthy(value: Any) -> int:
     return int(value is True or value == 1 or value == "1" or value == "true")
 
 
+def optional_thermistor(value: Any) -> float | None:
+    """Retain plausible optional readings without blocking base VOC history."""
+    result = number(value)
+    return result if result is not None and 0 <= result <= 110 else None
+
+
 def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
     sm = status.get("gcode_macro SM_LED_STATE", {})
     fan = status.get("fan_generic Filter", {})
@@ -117,6 +123,10 @@ def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
         "vo": number(sgp_out.get("temperature", sm.get("voc_out"))),
         "ti": number(bme_in_temp.get("temperature", sm.get("temp_in"))),
         "to": number(bme_out_temp.get("temperature", sm.get("temp_out"))),
+        # Representative thermistors on the two-module Peltier assembly.
+        # Optional installations report -1; store missing data as null.
+        "pth": optional_thermistor(sm.get("peltier_hot_temp")),
+        "ptc": optional_thermistor(sm.get("peltier_cold_temp")),
         "pi": number(bme_in.get("pressure")),
         "po": number(bme_out.get("pressure")),
         "hi": number(bme_in.get("humidity")),

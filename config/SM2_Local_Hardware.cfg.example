@@ -28,6 +28,16 @@ variable_vent_close_angle: 67
 variable_fan_spinup_seconds: 5
 variable_minimum_safe_rpm: 2000
 variable_peltier_cooldown_seconds: 60
+# Opt-in thermal interlock. Set to 1 only after both sensors and thresholds are verified.
+variable_peltier_thermal_enabled: 0
+# PLACEHOLDER thresholds only. A chamber approaching 80 C can exceed these
+# values while Peltier is off. Temperature limits apply only while energized,
+# but enabling the module at 80 C would still trip a 60 C limit.
+# Establish hardware-rated thresholds before enabling protection.
+variable_peltier_hot_min_temp: 0
+variable_peltier_hot_max_temp: 60
+variable_peltier_cold_min_temp: 0
+variable_peltier_cold_max_temp: 60
 variable_pcb_max_temp: 70
 variable_mcu_max_temp: 75
 gcode:
@@ -154,17 +164,19 @@ min_temp: 0
 max_temp: 80
 
 #####################################################################
-# OPTIONAL THERMISTOR PORTS
+# OPTIONAL THERMISTOR PORTS (example mapping for thermal interlock)
+# When enabled, protection expects the names shown below. Verify actual
+# installed thermistor types and hot/cold wiring before activating.
 #####################################################################
 
-# [temperature_sensor SM_TH1]
+# [temperature_sensor SM_Peltier_Hot_Side]
 # sensor_type: Generic 3950
 # sensor_pin: SM:PA3
 # pullup_resistor: 4700
 # min_temp: 0
 # max_temp: 100
 
-# [temperature_sensor SM_TH2]
+# [temperature_sensor SM_Peltier_Cold_Side]
 # sensor_type: Generic 3950
 # sensor_pin: SM:PA4
 # pullup_resistor: 4700
