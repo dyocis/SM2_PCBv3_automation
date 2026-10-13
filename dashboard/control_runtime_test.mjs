@@ -12,7 +12,8 @@ const status = {
     auto_reason: "IDLE", current_state: "IDLE", auto_mode: 1, manual_override: 0,
     fault: 0, fan_ready: 1, uv: 0, peltier: 0, vent_open: 0, vent_closed_ready: 1,
     vent_pending_open: 0, peltier_pending_on: 0, peltier_cooldown_active: 0,
-    peltier_interlock_state: "READY", print_active: 0, purge_active: 0,
+    peltier_interlock_state: "READY", peltier_auto_state: "DISABLED", peltier_auto_demand: 0,
+    print_active: 0, purge_active: 0,
     sgp40_calibration_active: 0, sgp40_calibration_hold: 0,
     sgp40_calibration_phase: "IDLE", sgp40_calibration_remaining: 0,
     sgp40_calibration_duration: 86400, sgp40_calibration_revision: 0,
@@ -94,6 +95,7 @@ const acceptDialog = async () => {
 };
 
 assert(byId("connectionText").textContent === "Live", "Fake Moonraker did not reach Live state");
+assert(byId("peltierAutoState").textContent === "DISABLED", "Peltier automatic state was not rendered");
 byId("controlLockButton").click();
 await acceptDialog();
 assert(byId("controlLockButton").dataset.locked === "false", "Control console did not unlock");
@@ -136,6 +138,12 @@ FakeWebSocket.instance.emit("message", { data: JSON.stringify({
   }],
 }) });
 assert(byId("peltierHotTemp").textContent === "72.1°C", "Peltier hot-side temperature not rendered");
+FakeWebSocket.instance.emit("message", { data: JSON.stringify({
+  jsonrpc: "2.0",
+  method: "notify_status_update",
+  params: [{ "gcode_macro SM_LED_STATE": { peltier_auto_state: "THERMAL FAULT", peltier_auto_demand: 0 } }],
+}) });
+assert(byId("peltierAutoState").textContent === "THERMAL FAULT", "Automatic Peltier reason did not update");
 assert(byId("peltierColdTemp").textContent === "39.4°C", "Peltier cold-side temperature not rendered");
 assert(byId("peltierFaultResetButton").hidden === false, "Peltier-only fault reset not shown");
 assert(byId("safetyState").textContent === "PELTIER FAULT", "Peltier-only fault should not become a global fault");

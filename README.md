@@ -125,6 +125,30 @@ Thermal protection is independently opt-in in the existing `[gcode_macro SM2_SET
 
 After a software update, use `FIRMWARE_RESTART` and `NEVERMORE_STATUS` to verify that expected temperatures are displayed. Physical/electrical testing belongs in the initial bench build, not routine end-user deployment.
 
+### Optional temperature-driven Peltier automation (development)
+
+**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Chamber ventilation and VOC emergency exhaust take precedence: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
+
+The public installer leaves automatic Peltier cooling **off by default**. Users may opt in by setting the following inside the preserved, local `[gcode_macro SM2_SETTINGS]` section after establishing suitable module-specific thermal limits:
+
+```ini
+# Opt-in; do not enable before validating Peltier temperature safety settings
+variable_peltier_auto_enabled: 0
+# Illustrative *air-temperature* control values (not TEC thermal ratings)
+variable_peltier_auto_on_temp: 45
+variable_peltier_auto_off_temp: 40
+```
+
+For automatic cooling to operate, `variable_peltier_auto_enabled: 1` **and** `variable_peltier_thermal_enabled: 1` must both be configured, hot/cold thermistors must be present, both current thermistor readings must be inside valid configured thermal limits, and the Peltier/vent hardware must be installed. This explicitly prevents users from accidentally enabling automated cooling with the provisional 60°C thermal cutoff. The ON temperature must exceed the OFF temperature to provide hysteresis.
+
+At or above the ON air temperature, while the exhaust is closed and allowed, the automation may request Peltier cooling. It requests OFF at or below the OFF air temperature. While Peltier is running, pending, or in cooldown, normal fan requests cannot reduce the fan below full speed. When the Peltier stops after a temperature request, the fan completes the configured cooldown without disabling UV or VOC filtration.
+
+The `NEVERMORE_STATUS` command prints `PELTIER AUTO STATE` and `DEMAND`. The Controls dashboard displays a separate "Cooler auto" status. This feature does **not** alter manually commanded Peltier operation and never bypasses its existing physical or software interlocks.
+
+**After installation:** Use the live status, dashboard and history to confirm operation. No post-install electrical testing, thermistor relocation, enclosure opening, or deliberate overheating is part of the update procedure. The optional UV LED thermistor and its independent UV-only protection are tracked separately in [issue #8](https://github.com/dyocis/SM2_PCBv3_automation/issues/8).
+
+
+
 The installer will not create a Peltier configuration without also enabling the servo. A manually edited configuration containing `[output_pin peltier]` without `[servo SM_Vent]` is an unsupported combination; startup detection sets a Nevermore fault and refuses Peltier operation.
 
 > [!NOTE]
