@@ -197,7 +197,7 @@ def sample_plausibility_error(sample: dict[str, Any]) -> str | None:
     if revision is not None and not 0.0 <= revision <= 1_000_000.0:
         return "SGP40 calibration revision is outside the expected range"
 
-     for key in ("pcb", "mcu"):
+    for key in ("pcb", "mcu"):
         value = number(sample.get(key))
         if value is not None and not 1.0 <= value <= 125.0:
             return f"{key} is outside the controller temperature range"
