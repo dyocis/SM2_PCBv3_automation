@@ -12,12 +12,22 @@ from test_peltier_thermal import JINJA, MACROS as CONTROL, make_printer
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTOMATION_SOURCE = (ROOT / "config/SM2_Automation.cfg").read_text(encoding="utf-8")
+HARDWARE_SOURCE = (ROOT / "config/SM2_Hardware_Control.cfg").read_text(encoding="utf-8")
 SECTIONS = re.findall(
     r"^\[(?:gcode_macro|delayed_gcode) ([^]]+)\]\s*\n(.*?)(?=^\[|\Z)",
     AUTOMATION_SOURCE, re.M | re.S,
 )
 AUTOMATION = {}
 for name, body in SECTIONS:
+    match = re.search(r"(?m)^gcode:\s*$", body)
+    if match:
+        AUTOMATION[name] = body[match.end():]
+
+# Test the actual vent-close macro, not a mock of the startup behavior.
+for name, body in re.findall(
+    r"^\[(?:gcode_macro|delayed_gcode) ([^]]+)\]\s*\n(.*?)(?=^\[|\Z)",
+    HARDWARE_SOURCE, re.M | re.S
+):
     match = re.search(r"(?m)^gcode:\s*$", body)
     if match:
         AUTOMATION[name] = body[match.end():]
@@ -168,6 +178,21 @@ class PeltierAutoTests(unittest.TestCase):
                 self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=1.0", out)
         out = render("NEVERMORE_FILTER", build(active=0, pending=0, cooldown=0), SPEED=0)
         self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=0.0", out)
+
+    def test_startup_closed_vent_completes_readiness_confirmation(self):
+        p = build()
+        p["gcode_macro SM_LED_STATE"]["vent_open"] = 0
+        p["gcode_macro SM_LED_STATE"]["vent_closed_ready"] = 0
+        p["gcode_macro SM2_SETTINGS"]["vent_close_angle"] = 67
+        out = render("_VENT_CLOSE_NOW", p)
+        self.assertIn("SET_SERVO SERVO=SM_Vent ANGLE=67", out)
+        self.assertIn("ID=VENT_CLOSE_READY DURATION=6", out)
+        # After readiness becomes true, repeated AUTO cycles must not
+        # drive the servo needlessly.
+        p["gcode_macro SM_LED_STATE"]["vent_closed_ready"] = 1
+        settled = render("_VENT_CLOSE_NOW", p)
+        self.assertNotIn("SET_SERVO SERVO=SM_Vent ANGLE=67", settled)
+        self.assertNotIn("ID=VENT_CLOSE_READY DURATION=6", settled)
 
     def test_manual_mode_does_not_shutdown_manually_commanded_peltier(self):
         out = render("NEVERMORE_AUTO_PELTIER",
