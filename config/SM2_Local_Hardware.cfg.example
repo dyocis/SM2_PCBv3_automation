@@ -206,3 +206,16 @@ max_temp: 80
 # pullup_resistor: 4700
 # min_temp: 0
 # max_temp: 100
+
+# Optional installed UV LED assembly thermistor.
+# Use EXACTLY the already-verified pin and sensor type from your own
+# existing Klipper config. SM:PA5 is commonly TH3 but is NOT assumed here.
+# The active Voron 300 sensor was previously named SM_UV_LEDs.
+# Do not define a second sensor on an occupied pin or change Peltier PA3/PA4.
+#
+# [temperature_sensor SM_UV_LEDs]
+# sensor_type: REPLACE_WITH_YOUR_VERIFIED_THERMISTOR_TYPE
+# sensor_pin: SM:REPLACE_WITH_YOUR_VERIFIED_PIN
+# pullup_resistor: 4700
+# min_temp: 0
+# max_temp: 100
