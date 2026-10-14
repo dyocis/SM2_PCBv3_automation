@@ -96,6 +96,8 @@ const acceptDialog = async () => {
 
 assert(byId("connectionText").textContent === "Live", "Fake Moonraker did not reach Live state");
 assert(byId("peltierAutoState").textContent === "DISABLED", "Peltier automatic state was not rendered");
+assert(byId("uvLedTemp").textContent === "N/A", "Absent optional UV sensor must display N/A");
+assert(byId("uvThermalReadout").textContent.includes("N/A"), "UV live component must display absent sensor");
 byId("controlLockButton").click();
 await acceptDialog();
 assert(byId("controlLockButton").dataset.locked === "false", "Control console did not unlock");
@@ -152,6 +154,34 @@ assert(window.document.querySelector('[data-action="peltier-toggle"]').disabled,
 byId("peltierFaultResetButton").click();
 await acceptDialog();
 assert(scripts.includes("NEVERMORE_PELTIER_THERMAL_RESET"), "Peltier-only fault reset did not invoke guarded macro");
+
+FakeWebSocket.instance.emit("message", { data: JSON.stringify({
+  jsonrpc: "2.0",
+  method: "notify_status_update",
+  params: [{
+    "gcode_macro SM_LED_STATE": {
+      uv_led_temp: 92.3,
+      uv_thermal_fault: 1,
+      uv_thermal_state: "FAULT",
+      uv_cooldown_active: 0,
+    },
+  }],
+}) });
+assert(byId("uvLedTemp").textContent === "92.3°C", "Optional UV LED thermistor not displayed");
+assert(byId("uvThermalReadout").textContent.includes("92.3°C"), "Live UV component temperature missing");
+assert(byId("uvFaultResetButton").hidden === false, "UV thermal reset not shown");
+assert(byId("safetyState").textContent === "UV THERMAL FAULT", "UV-only latch not represented independently");
+assert(window.document.querySelector('[data-action="uv-toggle"]').disabled,
+  "UV activation button must be disabled when UV thermal fault is latched");
+byId("uvFaultResetButton").click();
+await acceptDialog();
+assert(scripts.includes("NEVERMORE_UV_THERMAL_RESET"), "UV-only reset must call guarded macro");
+FakeWebSocket.instance.emit("message", { data: JSON.stringify({
+  jsonrpc: "2.0",
+  method: "notify_status_update",
+  params: [{ "gcode_macro SM_LED_STATE": { uv_thermal_fault: 0, uv_thermal_state: "MONITOR ONLY" } }],
+}) });
+assert(byId("uvThermalState").textContent === "MONITOR ONLY", "UV monitoring state not updated");
 
 byId("sgpCalibrationButton").click();
 await acceptDialog();

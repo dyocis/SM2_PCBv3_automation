@@ -97,6 +97,41 @@ Unselected hardware is not defined in Klipper. Its macros become safe no-ops, au
 > [!WARNING]
 > Peltier support is an advanced beta feature. Optional hot-side and cold-side temperature telemetry is available when Klipper sensors named `SM_Peltier_Hot_Side` and `SM_Peltier_Cold_Side` are configured. Both readings are recorded continuously, including while the Peltier is off. Temperature-limit **enforcement is disabled by default**, and no assumed thermal limits are safe for every Peltier module or high-temperature chamber. Existing fan-RPM, vent, PCB/MCU, and cooldown interlocks remain active independently.
 
+### Optional UV LED thermistor and thermal shutdown (issue #8, unreleased)
+
+The UV LED assembly thermistor is **optional**: filter-only builds, legacy UV installations without a thermistor, and Peltier-only setups continue to work unchanged. The implementation reads a Klipper `[temperature_sensor SM_UV_LEDs]` if already configured, independently of both Peltier sensors. Live temperature is shown in `NEVERMORE_STATUS`, the dashboard Live/Controls views, and a separate UV LED history chart (with `N/A` when missing).
+
+**First verify your existing Klipper thermistor name and wiring.** Do not add a second definition for the same sensor, guess its pin, or move the Peltier thermistors on PA3/PA4. **Verified on the Voron 300:** the existing sensor is `SM_UV_LEDs`, with `sensor_type: Generic 3950`, `sensor_pin: SM:PA5`, and `pullup_resistor: 4700`. Both `nevermore.cfg` and `SM2_PCBv3_automation/SM2_Local_Hardware.cfg` contain this section; determine the *active include chain* before editing, and avoid loading both definitions. This pin assignment is specific to this printer, not a universal default. The Voron 300 owner describes a **Generic 3950 pearl thermistor** rated to measure up to 300°C; this is the sensor's measuring capability, **not** the UV LEDs' continuous safe temperature. The owner proposes **100°C** as a provisional UV LED assembly cutoff. No datasheet-qualified continuous LED operating limit has yet been supplied. Do not assume that a 100°C software trip guarantees the LEDs never exceed 100°C: 5-second monitor sampling, thermistor response and heat soak can overshoot. A conservative lower trip may be necessary when LED ratings are verified.
+
+For an existing installed Generic 3950 sensor, verify the exact section and pin in the private Klipper configuration. A representative definition has these values; substitute only the **known** physical pin:
+
+```ini
+[temperature_sensor SM_UV_LEDs]
+sensor_type: Generic 3950
+sensor_pin: SM:YOUR_VERIFIED_PIN
+pullup_resistor: 4700
+min_temp: 0
+max_temp: 125
+```
+
+The Klipper `max_temp` example of 125°C is a separate emergency sensor-validity bound, deliberately above the proposed 100°C software UV cutoff. Setting both limits to 100°C could cause a **global Klipper shutdown** before the UV-only macro safely isolates the output. Verify your actual sensor's documented resistance/pull-up configuration and wiring; do not overwrite a working sensor definition merely to match this example.
+
+UV-specific settings belong inside the preserved, private `[gcode_macro SM2_SETTINGS]` section, before `gcode:`:
+
+```ini
+# Monitoring operates whenever SM_UV_LEDs is present.
+# Leave protection disabled until the sensor readings and LED rating are verified.
+variable_uv_thermal_enabled: 0
+variable_uv_thermal_min_temp: 0
+variable_uv_thermal_max_temp: 100
+variable_uv_thermal_reset_margin: 5
+variable_uv_cooldown_seconds: 60
+```
+
+When protection is **explicitly enabled**, a missing, invalid or out-of-range UV thermistor **inhibits UV startup without a latch**. A violation while the LEDs are ON immediately commands UV OFF when detected by the monitor, latches a **UV-only fault**, and holds full fan airflow through a 60-second cooldown. The fan, Peltier, vent and unrelated filtration remain available; existing global airflow, PCB/MCU temperature and calibration protections retain priority. The 100°C threshold trips at **100°C or greater**, and a latched fault cannot auto-restart. To clear a fault, investigate its cause, allow cooldown to finish, and ensure the UV thermistor is at most `100 - 5 = 95°C`; then run `NEVERMORE_UV_THERMAL_RESET` (or use the guarded dashboard reset). A reset is refused if thermistor readings or configured bounds are invalid.
+
+With protection disabled, the sensor still records temperatures, but the existing UV behavior is preserved. UV thermal protection remains **disabled by default** in the public template; the user's working printer stays on `main` until printer-side verification. Do not deliberately overheat LEDs or open the printer for post-install software verification.
+
 ### Optional Peltier thermistor integration (development)
 
 For installed thermistors, define one representative hot-side sensor and one representative cold-side sensor in your private `SM2_Local_Hardware.cfg`. The software reads those names and does not require per-module electrical testing after installation:

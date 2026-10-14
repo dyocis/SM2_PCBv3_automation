@@ -28,6 +28,17 @@ variable_vent_close_angle: 67
 variable_fan_spinup_seconds: 5
 variable_minimum_safe_rpm: 2000
 variable_peltier_cooldown_seconds: 60
+# Optional UV thermistor monitoring and opt-in UV-only thermal interlock.
+# OFF by default. Max 0 is deliberately INVALID until a hardware-rated
+# UV LED assembly limit has been established and configured locally.
+variable_uv_thermal_enabled: 0
+variable_uv_thermal_min_temp: 0
+variable_uv_thermal_max_temp: 0
+# On the Voron 300 the owner reports a Generic 3950 pearl sensor and
+# proposes 100 C as the LED assembly cutoff (not an established datasheet
+# continuous-use rating). Configure that only in private local settings.
+variable_uv_thermal_reset_margin: 5
+variable_uv_cooldown_seconds: 60
 # Opt-in thermal interlock. Set to 1 only after both sensors and thresholds are verified.
 variable_peltier_thermal_enabled: 0
 # PLACEHOLDER thresholds only. A chamber approaching 80 C can exceed these
@@ -198,3 +209,19 @@ max_temp: 80
 # pullup_resistor: 4700
 # min_temp: 0
 # max_temp: 100
+
+# Optional installed UV LED assembly thermistor.
+# Use EXACTLY the already-verified pin and sensor type from your own
+# existing Klipper config. SM:PA5 is commonly TH3 but is NOT assumed here.
+# The active Voron 300 sensor was previously named SM_UV_LEDs.
+# Do not define a second sensor on an occupied pin or change Peltier PA3/PA4.
+#
+# [temperature_sensor SM_UV_LEDs]
+# sensor_type: Generic 3950
+# sensor_pin: SM:REPLACE_WITH_YOUR_VERIFIED_PIN
+# pullup_resistor: 4700
+# min_temp: 0
+# max_temp: 125
+# Use a Klipper reporting max_temp above the software UV cutoff
+# (100 C on the owner's build), or Klipper can globally shut down
+# before the UV-only software protection isolates the LEDs.
