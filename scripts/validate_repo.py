@@ -159,6 +159,7 @@ def validate_configs(errors: list[str]) -> None:
     optional_thermistor_references = {
         "temperature_sensor SM_Peltier_Hot_Side",
         "temperature_sensor SM_Peltier_Cold_Side",
+        "temperature_sensor SM_UV_LEDs",
     }
     for object_name in sorted(set(object_reference.findall(all_content))):
         if object_name.lower() in defined_sections:
@@ -241,6 +242,7 @@ def validate_dashboard(errors: list[str]) -> None:
         "NEVERMORE_MANUAL",
         "NEVERMORE_FILTER",
         "NEVERMORE_UV",
+        "NEVERMORE_UV_THERMAL_RESET",
         "NEVERMORE_PELTIER",
         "NEVERMORE_OFF",
         "NEVERMORE_AUTO_ENABLE",
