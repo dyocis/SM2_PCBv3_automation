@@ -28,6 +28,14 @@ variable_vent_close_angle: 67
 variable_fan_spinup_seconds: 5
 variable_minimum_safe_rpm: 2000
 variable_peltier_cooldown_seconds: 60
+# Optional UV thermistor monitoring and opt-in UV-only thermal interlock.
+# OFF by default. Max 0 is deliberately INVALID until a hardware-rated
+# UV LED assembly limit has been established and configured locally.
+variable_uv_thermal_enabled: 0
+variable_uv_thermal_min_temp: 0
+variable_uv_thermal_max_temp: 0
+variable_uv_thermal_reset_margin: 5
+variable_uv_cooldown_seconds: 60
 # Opt-in thermal interlock. Set to 1 only after both sensors and thresholds are verified.
 variable_peltier_thermal_enabled: 0
 # PLACEHOLDER thresholds only. A chamber approaching 80 C can exceed these
