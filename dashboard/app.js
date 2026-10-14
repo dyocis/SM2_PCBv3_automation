@@ -63,7 +63,7 @@
       "vocDelta", "efficiency", "vocFill", "warningMarker", "highMarker", "emergencyMarker",
       "warningLabel", "highLabel", "emergencyLabel", "coolingPill", "tempIn", "tempOut",
       "tempDelta", "hysteresisRange", "temperaturePosition", "coolingOffLabel", "coolingOnLabel",
-      "fanIcon", "fanComponentText", "fanComponentState", "uvComponentState",
+      "fanIcon", "fanComponentText", "fanComponentState", "uvComponentState", "uvThermalReadout",
       "peltierComponentState", "peltierInterlockText", "peltierThermalReadout", "ventIcon", "ventComponentState", "lastAction", "lastActionClock", "transitionCount", "printState",
       "filename", "dataAge", "priorityStack", "footerEndpoint",
       "mediaHealthDial", "mediaHealthPill", "mediaHealthSummary", "restrictionState",
@@ -73,9 +73,9 @@
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
       "chartRange", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
-      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
+      "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "uvLedTemp", "uvThermalState", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
-      "clearFaultButton", "peltierFaultResetButton", "confirmDialog", "confirmForm", "confirmEyebrow",
+      "clearFaultButton", "peltierFaultResetButton", "uvFaultResetButton", "confirmDialog", "confirmForm", "confirmEyebrow",
       "confirmTitle", "confirmMessage", "confirmAcceptButton", "workspaceTabs",
     ].map((id) => [id, $(id)])
   );
@@ -324,6 +324,10 @@
       fanSpeed,
       rpm: numberOr(fan.rpm, sm.last_rpm, 0),
       uv: truthy(sm.uv),
+      uvLedTemp: validNumber(numberOr(sm.uv_led_temp)) && numberOr(sm.uv_led_temp) >= 0 ? numberOr(sm.uv_led_temp) : null,
+      uvThermalFault: truthy(sm.uv_thermal_fault),
+      uvCooldown: truthy(sm.uv_cooldown_active),
+      uvThermalState: String(sm.uv_thermal_state || "N/A").replace(/^"|"$/g, ""),
       peltier: truthy(sm.peltier),
       ventOpen: truthy(sm.vent_open),
       ventClosedReady: truthy(sm.vent_closed_ready),
@@ -444,6 +448,14 @@
 
     setComponent(els.fanComponentState, fanPercent > 0, `${fanPercent}%`);
     setComponent(els.uvComponentState, vm.uv);
+    if (vm.uvThermalFault || vm.uvCooldown) {
+      els.uvComponentState.textContent = vm.uvThermalFault ? "THERMAL FAULT" : "COOLDOWN";
+      els.uvComponentState.classList.remove("is-active");
+      els.uvComponentState.classList.add("is-pending");
+    } else {
+      els.uvComponentState.classList.remove("is-pending");
+    }
+    els.uvThermalReadout.textContent = `LED ${validNumber(vm.uvLedTemp) ? formatDecimal(vm.uvLedTemp) + "°C" : "N/A"} · ${vm.uvThermalState}`;
     setComponent(els.peltierComponentState, vm.peltier);
     if (vm.peltierThermalFault || vm.peltierCooldown || vm.peltierPending) {
       els.peltierComponentState.textContent = vm.peltierThermalFault ? "THERMAL FAULT" : vm.peltierCooldown ? "COOLDOWN" : "WAITING";
@@ -748,7 +760,7 @@
   function sanitizeHistoryPoint(point) {
     if (!point || !Number.isFinite(Number(point.t))) return null;
     const clean = { t: Number(point.t), mode: String(point.mode || "") };
-    ["vi", "vo", "ti", "to", "pth", "ptc", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
+    ["vi", "vo", "ti", "to", "pth", "ptc", "uvt", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
       const raw = point[key];
       const value = Number(raw);
       clean[key] = raw !== null && raw !== "" && Number.isFinite(value) ? value : null;
@@ -830,6 +842,7 @@
         to: vm.tempOut,
         pth: vm.peltierHotTemp,
         ptc: vm.peltierColdTemp,
+      uvt: vm.uvLedTemp,
         pi: vm.pressureIn,
         po: vm.pressureOut,
         hi: vm.humidityIn,
@@ -869,6 +882,7 @@
       to: vm.tempOut,
       pth: vm.peltierHotTemp,
       ptc: vm.peltierColdTemp,
+      uvt: vm.uvLedTemp,
       pi: vm.pressureIn,
       po: vm.pressureOut,
       hi: vm.humidityIn,
@@ -1033,7 +1047,7 @@
     els.controlFanVisual.style.setProperty("--control-fan-speed", String(fanPercent));
     els.controlFanPercent.textContent = fanPercent + "%";
     els.controlFanRpm.textContent = formatInteger(vm.rpm) + " RPM";
-    els.uvControlState.textContent = vm.uv ? "ON" : "OFF";
+    els.uvControlState.textContent = vm.uvThermalFault ? "FAULT" : vm.uv ? "ON" : vm.uvCooldown ? "COOLDOWN" : "OFF";
     els.peltierControlState.textContent = vm.peltierThermalFault ? "FAULT" : vm.peltier
       ? "ON"
       : vm.peltierCooldown ? "COOLDOWN" : vm.peltierPending ? "WAITING" : "OFF";
@@ -1045,12 +1059,15 @@
 
     els.pcbTemp.textContent = validNumber(vm.pcbTemp) ? vm.pcbTemp.toFixed(1) + "°C" : "—°C";
     els.mcuTemp.textContent = validNumber(vm.mcuTemp) ? vm.mcuTemp.toFixed(1) + "°C" : "—°C";
+    els.uvLedTemp.textContent = validNumber(vm.uvLedTemp) ? vm.uvLedTemp.toFixed(1) + "°C" : "N/A";
+    els.uvThermalState.textContent = vm.uvThermalState;
     els.peltierHotTemp.textContent = validNumber(vm.peltierHotTemp) ? vm.peltierHotTemp.toFixed(1) + "°C" : "N/A";
     els.peltierColdTemp.textContent = validNumber(vm.peltierColdTemp) ? vm.peltierColdTemp.toFixed(1) + "°C" : "N/A";
     els.peltierAutoState.textContent = vm.peltierAutoState;
     els.airflowState.textContent = vm.rpm >= MIN_SAFE_RPM ? "Verified" : fanPercent > 0 ? "Starting" : "Stopped";
     els.safetyState.textContent = vm.fault
       ? "FAULT"
+      : vm.uvThermalFault ? "UV THERMAL FAULT"
       : vm.peltierThermalFault ? "PELTIER FAULT"
       : vm.peltierCooldown ? "COOLDOWN" : vm.peltierPending ? "INTERLOCK WAIT"
         : vm.rpm >= MIN_SAFE_RPM || (!vm.uv && !vm.peltier) ? "NOMINAL" : "CHECK AIRFLOW";
@@ -1060,7 +1077,8 @@
       const emergency = button.dataset.action === "emergency-off";
       const baselineRestartBlock = button.dataset.action === "resume-auto" && vm.sgpCalibrationResetApplied;
       button.disabled = !controlsAvailable || (state.controlsLocked && !emergency) || (vm.sgpCalibrationActive && !emergency) || baselineRestartBlock ||
-        (button.dataset.action === "peltier-toggle" && vm.peltierThermalFault);
+        (button.dataset.action === "peltier-toggle" && vm.peltierThermalFault) ||
+        (button.dataset.action === "uv-toggle" && vm.uvThermalFault);
     });
     els.controlStatus.textContent = state.controlPending
       ? "Applying command…"
@@ -1073,6 +1091,7 @@
     els.controlLockButton.querySelector("strong").textContent = state.controlsLocked ? "LOCKED" : "UNLOCKED";
     els.clearFaultButton.hidden = !vm.fault;
     els.peltierFaultResetButton.hidden = !vm.peltierThermalFault;
+    els.uvFaultResetButton.hidden = !vm.uvThermalFault;
 
     els.recorderState.textContent = state.historySource === "pi" ? "Pi recorder" : "Browser history";
     els.recorderState.dataset.state = state.historySource;
@@ -1149,7 +1168,9 @@
       els.chartEmpty.hidden = false;
       els.chartEmpty.textContent = state.historyMetric === "peltier"
         ? "Peltier thermistor history unavailable (optional sensors)."
-        : "No valid history for this metric.";
+        : state.historyMetric === "uv-led"
+          ? "UV LED thermistor history unavailable (optional sensor)."
+          : "No valid history for this metric.";
       return;
     }
 
@@ -1270,6 +1291,12 @@
         thresholds: [],
       };
     }
+    if (metric === "uv-led") {
+      return {
+        series: [{ label: "UV LED °C", color: "#ff7954", values: samples.map((point) => point.uvt) }],
+        thresholds: [],
+      };
+    }
     if (metric === "pressure") {
       return {
         series: [
@@ -1298,7 +1325,7 @@
 
   function formatChartValue(value, metric) {
     if (!validNumber(value)) return "—";
-    if (metric === "temperature" || metric === "peltier") return value.toFixed(1) + "°";
+    if (metric === "temperature" || metric === "peltier" || metric === "uv-led") return value.toFixed(1) + "°";
     if (metric === "pressure") return value.toFixed(1) + " Pa";
     return Math.round(value).toString();
   }
@@ -1406,7 +1433,13 @@
 
   async function handleControlAction(action) {
     const vm = state.vm || buildViewModel();
-    if (action === "uv-toggle" && !vm.uv) return guardedOutputOn("uv");
+    if (action === "uv-toggle" && !vm.uv) {
+      if (vm.uvThermalFault) {
+        showToast("Reset the UV LED thermal latch after inspecting its cause.");
+        return;
+      }
+      return guardedOutputOn("uv");
+    }
     if (action === "peltier-toggle" && !vm.peltier && !vm.peltierPending) {
       if (vm.peltierThermalFault) {
         showToast("Reset the Peltier thermal latch after inspecting its cause.");
@@ -1460,6 +1493,12 @@
         title: "Turn all Nevermore outputs off?",
         message: "UV and Peltier will turn off before the Filter fan, and the exhaust vent will close. Nevermore will remain in manual mode.",
         script: "NEVERMORE_MANUAL\nNEVERMORE_OFF",
+        danger: true,
+      },
+      "uv-fault-reset": {
+        title: "Reset the UV LED thermal fault?",
+        message: "UV must be off, the cooldown complete, and its thermistor safely below the configured reset temperature. This does not affect Peltier or global faults.",
+        script: "NEVERMORE_UV_THERMAL_RESET",
         danger: true,
       },
       "peltier-fault-reset": {
