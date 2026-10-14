@@ -127,6 +127,8 @@ def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
         # Optional installations report -1; store missing data as null.
         "pth": optional_thermistor(sm.get("peltier_hot_temp")),
         "ptc": optional_thermistor(sm.get("peltier_cold_temp")),
+        # UV LED assembly thermistor is optional and independent of Peltier.
+        "uvt": optional_thermistor(sm.get("uv_led_temp")),
         "pi": number(bme_in.get("pressure")),
         "po": number(bme_out.get("pressure")),
         "hi": number(bme_in.get("humidity")),
