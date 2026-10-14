@@ -141,6 +141,16 @@ def validate_configs(errors: list[str]) -> None:
             elif kind == "delayed_gcode" and name:
                 delayed_ids.add(name.upper())
 
+    # Klipper permits 'description:' on gcode_macro but NOT delayed_gcode.
+    # Catch this before it reaches a printer's FIRMWARE_RESTART path.
+    delayed_section_pattern = re.compile(
+        r"(?ms)^\[delayed_gcode ([^]]+)\]\s*\n(.*?)(?=^\[|\Z)"
+    )
+    for path in config_files:
+        for match in delayed_section_pattern.finditer(path.read_text(encoding="utf-8")):
+            if re.search(r"(?m)^description\s*:", match.group(2)):
+                fail(errors, f"unsupported delayed_gcode description: {path.relative_to(ROOT)} [{match.group(1)}]")
+
     custom_call = re.compile(
         r"^\s*(NEVERMORE_[A-Z0-9_]+|SM_[A-Z0-9_]+|VENT_[A-Z0-9_]+|"
         r"NM_PROFILE_[A-Z0-9_]+|SGP40_[A-Z0-9_]+)\b",
