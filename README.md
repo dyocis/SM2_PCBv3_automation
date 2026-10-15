@@ -31,6 +31,12 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 
 The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, helper macros, directory names, MCU serial, or saved-variable file. Per-printer values live in one local file that is excluded by `.gitignore`.
 
+## Dashboard demonstration
+
+The optional browser dashboard provides **Live**, **History**, **Media**, and **Controls** views for monitoring and managing the Nevermore StealthMax V2. Available controls and readings depend on the installed hardware and local configuration.
+
+https://github.com/user-attachments/assets/c8f5814a-435c-4372-8eba-214bc37bcd2d
+
 ## Requirements
 
 - A Linux Klipper host such as Raspberry Pi OS, MainsailOS, or a KIAUH installation
