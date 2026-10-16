@@ -14,6 +14,8 @@ const status = {
     vent_pending_open: 0, peltier_pending_on: 0, peltier_cooldown_active: 0,
     peltier_interlock_state: "READY", peltier_auto_state: "DISABLED", peltier_auto_demand: 0,
     print_active: 0, purge_active: 0,
+    post_print_vent_target_temp: 35, post_print_vent_max_minutes: 60,
+    post_print_vent_active: 0, post_print_vent_window_target: 35,
     sgp40_calibration_active: 0, sgp40_calibration_hold: 0,
     sgp40_calibration_phase: "IDLE", sgp40_calibration_remaining: 0,
     sgp40_calibration_duration: 86400, sgp40_calibration_revision: 0,
@@ -101,6 +103,59 @@ assert(byId("uvThermalReadout").textContent.includes("N/A"), "UV live component 
 byId("controlLockButton").click();
 await acceptDialog();
 assert(byId("controlLockButton").dataset.locked === "false", "Control console did not unlock");
+
+// Post-print vent settings share the guarded control lock and G-code channel.
+assert(byId("postPrintVentTarget").value === "35", "Default exhaust temperature did not render");
+assert(byId("postPrintVentMinutes").value === "60", "Default vent timeout did not render");
+assert(byId("postPrintVentSave").disabled === false, "Unlocked vent-settings save is disabled");
+const submitVent = () => {
+  byId("postPrintVentForm").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+};
+const editVent = (target, minutes) => {
+  byId("postPrintVentTarget").value = target;
+  byId("postPrintVentTarget").dispatchEvent(new window.Event("input", { bubbles: true }));
+  byId("postPrintVentMinutes").value = minutes;
+  byId("postPrintVentMinutes").dispatchEvent(new window.Event("input", { bubbles: true }));
+};
+const beforeInvalid = scripts.length;
+editVent("81", "60");
+submitVent();
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert(scripts.length === beforeInvalid, "Invalid vent target escaped to Klipper");
+assert(byId("confirmDialog").open === false, "Out-of-range vent target reached confirmation");
+
+editVent("35", "241");
+submitVent();
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert(scripts.length === beforeInvalid, "Invalid vent timeout escaped to Klipper");
+assert(byId("confirmDialog").open === false, "Out-of-range vent time reached confirmation");
+
+editVent("38.5", "90");
+submitVent();
+await acceptDialog();
+assert(scripts.includes("NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=38.5 MAX_MINUTES=90"),
+  "Post-print setting changes did not invoke the guarded G-code macro");
+FakeWebSocket.instance.emit("message", { data: JSON.stringify({
+  jsonrpc: "2.0",
+  method: "notify_status_update",
+  params: [{ "gcode_macro SM_LED_STATE": {
+    post_print_vent_target_temp: 38.5, post_print_vent_max_minutes: 90,
+    post_print_vent_active: 1,
+  } }],
+}) });
+assert(byId("postPrintVentCurrent").textContent.includes("38.5°C"),
+  "Post-print settings were not refreshed from Klipper");
+assert(byId("postPrintVentNote").textContent.includes("current target and timeout stay unchanged"),
+  "The active cooling window must be identified as unaffected by settings changes");
+
+byId("controlLockButton").click();
+assert(byId("postPrintVentSave").disabled === true, "Locked vent settings were editable");
+const scriptsBeforeLock = scripts.length;
+submitVent();
+await new Promise((resolve) => setTimeout(resolve, 15));
+assert(scripts.length === scriptsBeforeLock, "Locked vent settings escaped to Klipper");
+byId("controlLockButton").click();
+await acceptDialog();
 
 window.document.querySelector('[data-action="fan-60"]').click();
 await acceptDialog();
@@ -207,6 +262,7 @@ FakeWebSocket.instance.emit("message", { data: JSON.stringify({
 await new Promise((resolve) => setTimeout(resolve, 20));
 assert(byId("sgpCalibrationButton").textContent === "Cancel SGP40 calibration", "Active calibration did not expose its cancel control");
 assert(window.document.querySelector('[data-action="fan-60"]').disabled, "Manual fan control remained available during SGP40 calibration");
+assert(byId("postPrintVentSave").disabled, "Vent settings remained editable during calibration");
 assert(byId("sgpCalibrationTime").textContent.includes("remaining"), "Calibration countdown was not rendered");
 
 byId("controlLockButton").click();

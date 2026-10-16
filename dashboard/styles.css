@@ -2078,3 +2078,84 @@ button:disabled {
   .sm2-fan { width: 220px; height: 220px; }
   .output-control { grid-template-columns: 46px minmax(0,1fr) auto; }
 }
+
+/* Post-print exhaust settings: compact, readable, and lock-aware. */
+.post-print-vent-settings {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(5, 7, 8, .7);
+}
+
+.post-print-vent-heading,
+.post-print-vent-fields {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.post-print-vent-heading {
+  justify-content: space-between;
+}
+
+.post-print-vent-heading h3 {
+  margin: 4px 0 0;
+  font-size: .92rem;
+}
+
+.post-print-vent-heading > strong {
+  color: var(--muted-bright);
+  font-size: .76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-print-vent-fields label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted-bright);
+  font-size: .72rem;
+}
+
+.post-print-vent-fields .field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted-bright);
+}
+
+.post-print-vent-fields input {
+  width: 82px;
+  min-height: 33px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--sm2-graphite);
+  color: #fff;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-print-vent-fields input:focus-visible {
+  outline: 2px solid var(--sm2-red-bright);
+  outline-offset: 2px;
+}
+
+.post-print-vent-fields input:disabled { opacity: .45; }
+.post-print-vent-fields button { min-height: 34px; padding: 7px 12px; }
+
+#postPrintVentNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: .66rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 620px) {
+  .post-print-vent-fields { align-items: stretch; }
+  .post-print-vent-fields label { justify-content: space-between; flex: 1 1 100%; }
+}

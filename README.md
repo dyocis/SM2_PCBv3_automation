@@ -31,9 +31,40 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 
 The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, helper macros, directory names, MCU serial, or saved-variable file. Per-printer values live in one local file that is excluded by `.gitignore`.
 
+### Exhaust vent policy
+
+**During a print or ordinary automatic filtration, the exhaust vent is for chamber-temperature control, not VOC management.** The inlet BME280 chamber-temperature reading opens the vent when it reaches the active material profile's `chamber_target`; the existing `chamber_hysteresis` keeps it open until temperature reaches `chamber_target - chamber_hysteresis`. Even a **VOC EMERGENCY** continues fan/UV treatment without opening the vent when the chamber is below its temperature limit.
+
+**After a print**, `NEVERMORE_PRINT_END` starts two independent operations: (1) chamber-temperature exhaust cooling, and (2) VOC-based **internal fan/UV filtration**. The exhaust opens only while the chamber is above a configured post-print temperature, and closes when that target is reached **or when a one-shot maximum runtime expires**, whichever comes first. High VOC can keep the filter fan and UV treatment running **but cannot reopen or extend the exhaust window**. Manual vent commands remain available; Peltier airflow/cooldown and emergency shutdown interlocks remain in effect.
+
+The defaults are **35°C** for the post-print vent target and **60 minutes** for the maximum vent runtime. To customize them, place the following in your preserved private `SM2_Local_Hardware.cfg`, inside `[gcode_macro SM2_SETTINGS]`:
+
+```ini
+variable_post_print_vent_target_temp: 35
+variable_post_print_vent_max_minutes: 60
+```
+
+The temperature target accepts 20–80°C; maximum runtime accepts 0–240 minutes, with `0` disabling automatic post-print vent cooling. Invalid settings fail closed. Existing private configurations that omit these settings safely use the defaults. During an **active print**, vent opening follows the material-specific `chamber_target` and its hysteresis, with no post-print time cap. `NEVERMORE_STATUS` reports the post-print vent window state and its configured limits.
+
+#### Change post-print exhaust limits without editing configuration
+
+You can adjust the settings from the dashboard **Controls → Post-print exhaust limits** section. Unlock the controls, enter the new close temperature and maximum runtime, select **Save limits**, and confirm. The dashboard reads the current values back through Moonraker/Klipper status and calls the same macro below; it does not directly control the vent.
+
+Or run this in the Mainsail/Fluidd G-code console:
+
+```gcode
+NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=35 MAX_MINUTES=60
+```
+
+You can supply either parameter independently, for example `NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=38`, to preserve the current runtime limit. Invalid or nonnumeric values are rejected by Klipper. **Settings take effect on the next post-print cycle**, without altering the active vent window. To disable only automatic post-print exhaust, use `MAX_MINUTES=0`; internal VOC-driven filtration and UV treatment remain independent.
+
+If the printer already has a `[save_variables]` section, the command also persists both settings across Klipper restarts. Saved overrides take precedence over local-file defaults; `NEVERMORE_POST_PRINT_VENT_LOAD_SETTINGS` loads them at Klipper startup. Without `[save_variables]`, the macro still changes the current running settings, but reports that the changes won't persist across a restart. This package does not automatically create or modify the printer's `[save_variables]` section.
+
 ## Dashboard demonstration
 
 The optional browser dashboard provides **Live**, **History**, **Media**, and **Controls** views for monitoring and managing the Nevermore StealthMax V2. Available controls and readings depend on the installed hardware and local configuration.
+
+The **History → UV LED** and **History → Peltier** temperature graphs show ON/OFF transition markers and lightly shaded periods when the corresponding output is commanded ON. Hover over the graph to inspect temperature, recorded output state, and detected transitions. These come from the existing `uv` / `pel` fields recorded every 10 seconds by the optional Pi recorder (or from browser history while open). Transition times indicate the **first sampled state change**, not a precisely measured electrical switching time. Missing samples and restart gaps never generate inferred events; the last 24 hours are retained.
 
 https://github.com/user-attachments/assets/c8f5814a-435c-4372-8eba-214bc37bcd2d
 
@@ -168,7 +199,7 @@ After a software update, use `FIRMWARE_RESTART` and `NEVERMORE_STATUS` to verify
 
 ### Optional temperature-driven Peltier automation (development)
 
-**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Chamber ventilation and VOC emergency exhaust take precedence: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
+**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Temperature-driven chamber ventilation takes precedence over the Peltier, and VOC emergency remains a separate cooler inhibit: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
 
 The public installer leaves automatic Peltier cooling **off by default**. Users may opt in by setting the following inside the preserved, local `[gcode_macro SM2_SETTINGS]` section after establishing suitable module-specific thermal limits:
 

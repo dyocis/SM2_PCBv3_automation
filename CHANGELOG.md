@@ -11,19 +11,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - Compact tabbed dashboard with Live, History, Media, and guarded Controls views.
+- UV LED and Peltier thermal-history graphs now annotate recorded ON/OFF output transitions and active windows without inventing events across recorder gaps or restarts.
 - Official Nevermore3D mark and selected transparent StealthMax V2 artwork with retained source provenance.
 - Local `nevermore-history.service` recorder with 10-second samples, 24-hour retention, restart quarantine, and atomic history writes outside the Git checkout.
 - Runtime tests for the dashboard, history guards, recorder, controls, and Moonraker CORS configuration.
 - Optional Peltier hot/cold thermistor telemetry in `NEVERMORE_STATUS`, live and control dashboard views, and the 24-hour temperature history graph.
 - Opt-in Peltier-only thermal protection with configurable hot/cold limits, prestart inhibit, a latched active-operation fault, separate reset, and retained fan cooldown.
 - Opt-in air-temperature hysteresis for Peltier cooling independent of the VOC emergency band, with configurable ON/OFF temperatures and a separate automatic status readout.
+- Independent temperature-driven post-print vent window with a configurable target and one-shot maximum runtime; VOC treatment can continue after the vent closes.
 - Software-only Klipper/Jinja regression tests for optional-sensor installations, active-only thermal trips, exhaust priority, fan airflow, cooldown and vent readiness.
 
 ### Changed
 
 - Dashboard installation now configures the Nginx history route, exact Moonraker CORS origin, recorder service, and Mainsail link idempotently.
 - Uninstall removes only the CORS entry owned by this installer and preserves recorded history.
-- VOC emergency now prioritizes exhaust ventilation independently of Peltier hardware or status; automatic Peltier operation is controlled by chamber-air temperature instead of VOC emergency.
+- VOC does not open the exhaust in any automatic mode. During prints the vent follows the material temperature target and hysteresis; after prints it follows a separate temperature target and maximum open-time cap (35°C / 60 minutes by default), independent of VOC. High VOC continues internal fan/guarded UV treatment. Automatic Peltier operation remains temperature-driven and independently inhibited by VOC emergency.
 - Filter fan demand remains at full speed while the Peltier is active, waiting for airflow, or completing its cooldown.
 
 ### Fixed
