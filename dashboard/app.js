@@ -2277,6 +2277,7 @@
   });
   els.annotationForm.addEventListener("submit", addAnnotation);
   $("annotationCancel").addEventListener("click", () => els.annotationDialog.close());
+  $("annotationClose").addEventListener("click", () => els.annotationDialog.close());
   document.querySelector(".annotation-list").addEventListener("click", async (event) => {
     const remove = event.target.closest("[data-annotation-remove]");
     if (!remove) return;
