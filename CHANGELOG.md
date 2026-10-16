@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Compact tabbed dashboard with Live, History, Media, and guarded Controls views.
 - UV LED and Peltier thermal-history graphs now annotate recorded ON/OFF output transitions and active windows without inventing events across recorder gaps or restarts.
+- UV LED history also overlays recorded outlet SGP40 VOC Index on its own right-hand scale, with tooltip and legend labels; this visual comparison is not a direct UV-effectiveness measurement.
 - Official Nevermore3D mark and selected transparent StealthMax V2 artwork with retained source provenance.
 - Local `nevermore-history.service` recorder with 10-second samples, 24-hour retention, restart quarantine, and atomic history writes outside the Git checkout.
 - Runtime tests for the dashboard, history guards, recorder, controls, and Moonraker CORS configuration.
