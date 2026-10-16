@@ -28,6 +28,11 @@ variable_vent_close_angle: 67
 variable_fan_spinup_seconds: 5
 variable_minimum_safe_rpm: 2000
 variable_peltier_cooldown_seconds: 60
+# Post-print chamber exhaust opens only above this air temperature.
+# The maximum runtime is an independent hard cap, even with high VOC.
+# 0 minutes disables automatic post-print exhaust ventilation.
+variable_post_print_vent_target_temp: 35
+variable_post_print_vent_max_minutes: 60
 # Optional UV thermistor monitoring and opt-in UV-only thermal interlock.
 # OFF by default. Max 0 is deliberately INVALID until a hardware-rated
 # UV LED assembly limit has been established and configured locally.
