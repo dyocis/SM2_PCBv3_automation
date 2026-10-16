@@ -4,6 +4,7 @@
   const STORAGE_KEY = "nevermore-dashboard-endpoint";
   const HISTORY_KEY = "nevermore-dashboard-history-v2";
   const MEDIA_KEY = "nevermore-dashboard-media-v2";
+  const ANNOTATIONS_KEY = "nevermore-dashboard-history-annotations-v1";
   const DB_NAMESPACE = "nevermore_dashboard";
   const STALE_AFTER_MS = 20_000;
   const HISTORY_SAMPLE_MS = 10_000;
@@ -71,7 +72,8 @@
       "pressureIn", "pressureOut", "newMediaButton", "pressureCalibrateButton",
       "vocCalibrateButton", "calibrationNote", "recorderState", "historyChart",
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
-      "chartRange", "controlStatus", "controlLockButton", "controlFanVisual",
+      "chartRange", "annotationOpen", "annotationDialog", "annotationForm", "annotationKind",
+      "annotationTime", "annotationNote", "annotationList", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
       "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "uvLedTemp", "uvThermalState", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
@@ -90,6 +92,7 @@
     isDemo: false,
     demoTimer: null,
     history: [],
+    annotations: [],
     historyMetric: "voc",
     historyMinutes: 60,
     historySource: "browser",
@@ -696,6 +699,110 @@
     } catch {
       localStorage.removeItem(MEDIA_KEY);
     }
+
+    try {
+      state.annotations = sanitizeAnnotations(JSON.parse(localStorage.getItem(ANNOTATIONS_KEY) || "[]"));
+    } catch {
+      localStorage.removeItem(ANNOTATIONS_KEY);
+    }
+  }
+
+  function sanitizeAnnotations(items) {
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    if (!Array.isArray(items)) return [];
+    const validKinds = ["garage-open", "garage-close", "note"];
+    const entries = items.filter((item) =>
+      item && typeof item.id === "string" && item.id.length <= 80 &&
+      validKinds.includes(item.kind) && typeof item.label === "string" &&
+      item.label.length > 0 && item.label.length <= 80 &&
+      Number.isFinite(item.t) && item.t >= cutoff && item.t <= Date.now() + 60_000);
+    return [...new Map(entries.map((item) => [item.id, {
+      id: item.id, t: item.t, kind: item.kind, label: item.label,
+    }])).values()].sort((a, b) => a.t - b.t).slice(-100);
+  }
+
+  async function loadAnnotations() {
+    if (!client || state.isDemo) return;
+    try {
+      const result = await client.call("server.database.get_item", {
+        namespace: DB_NAMESPACE, key: "history_annotations",
+      });
+      state.annotations = sanitizeAnnotations(result?.value);
+      localStorage.setItem(ANNOTATIONS_KEY, JSON.stringify(state.annotations));
+    } catch {
+      // A fresh installation has no stored annotations yet. Keep browser
+      // history visible if Moonraker's optional database is unavailable.
+    }
+    renderAnnotationList();
+    renderChart();
+  }
+
+  async function saveAnnotations(items) {
+    if (!client || state.isDemo || state.connection !== "live") {
+      throw new Error("Connect to Moonraker before saving history annotations.");
+    }
+    const next = sanitizeAnnotations(items);
+    await client.call("server.database.post_item", {
+      namespace: DB_NAMESPACE, key: "history_annotations", value: next,
+    });
+    state.annotations = next;
+    localStorage.setItem(ANNOTATIONS_KEY, JSON.stringify(next));
+    renderAnnotationList();
+    renderChart();
+  }
+
+  function localDateTimeValue(date = new Date()) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+      .toISOString().slice(0, 16);
+  }
+
+  function annotationLabel(kind, note) {
+    return kind === "garage-open" ? "Garage door opened"
+      : kind === "garage-close" ? "Garage door closed"
+        : note.trim().slice(0, 80);
+  }
+
+  async function addAnnotation(event) {
+    event.preventDefault();
+    const kind = els.annotationKind.value;
+    const t = new Date(els.annotationTime.value).getTime();
+    const label = annotationLabel(kind, els.annotationNote.value);
+    if (!Number.isFinite(t) || t < Date.now() - HISTORY_RETENTION_MS ||
+        t > Date.now() + 60_000 || !label) {
+      showToast("Choose an event within the last 24 hours and enter a note if needed.");
+      return;
+    }
+    if (!["garage-open", "garage-close", "note"].includes(kind)) return;
+    const item = { id: String(Date.now()) + "-" + Math.random().toString(36).slice(2),
+      t, kind, label };
+    try {
+      await saveAnnotations([...state.annotations, item]);
+      els.annotationDialog.close();
+      showToast("History event saved in Moonraker.");
+    } catch (error) {
+      showToast("Event not saved: " + error.message);
+    }
+  }
+
+  function renderAnnotationList() {
+    if (!els.annotationList) return;
+    els.annotationList.replaceChildren();
+    const list = sanitizeAnnotations(state.annotations).slice(-6).reverse();
+    for (const item of list) {
+      const row = document.createElement("div");
+      row.className = "annotation-entry";
+      const label = document.createElement("span");
+      label.textContent = new Date(item.t).toLocaleTimeString([], {
+        hour: "numeric", minute: "2-digit",
+      }) + " · " + item.label;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.dataset.annotationRemove = item.id;
+      remove.setAttribute("aria-label", "Remove " + item.label);
+      row.append(label, remove);
+      els.annotationList.append(row);
+    }
   }
 
   async function initializeLiveFeatures() {
@@ -716,6 +823,7 @@
     }
 
     await loadCollectorHistory();
+    await loadAnnotations();
   }
 
   async function persistMedia(showResult = false) {
@@ -768,7 +876,7 @@
   function sanitizeHistoryPoint(point) {
     if (!point || !Number.isFinite(Number(point.t))) return null;
     const clean = { t: Number(point.t), mode: String(point.mode || "") };
-    ["vi", "vo", "ti", "to", "pth", "ptc", "uvt", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
+    ["vi", "vo", "ti", "to", "pth", "ptc", "uvt", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "door", "cal", "sgp"].forEach((key) => {
       const raw = point[key];
       const value = Number(raw);
       clean[key] = raw !== null && raw !== "" && Number.isFinite(value) ? value : null;
@@ -793,6 +901,7 @@
     if (!validNumber(point.fs) || point.fs < 0 || point.fs > 1.05) return "fan command outside range";
     if (!validNumber(point.rpm) || point.rpm < 0 || point.rpm > 30_000) return "fan RPM outside range";
     if (validNumber(point.vent) && point.vent !== 0 && point.vent !== 1) return "vent state outside range";
+    if (validNumber(point.door) && point.door !== 0 && point.door !== 1) return "door state outside range";
     if (validNumber(point.cal) && point.cal !== 0 && point.cal !== 1) return "calibration state outside range";
     if (validNumber(point.sgp) && (point.sgp < 0 || point.sgp > 1_000_000)) return "SGP40 calibration revision outside range";
     return null;
