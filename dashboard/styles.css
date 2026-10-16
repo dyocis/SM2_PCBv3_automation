@@ -1656,7 +1656,8 @@ button {
 
 .chart-legend {
   display: flex;
-  gap: 18px;
+  flex-wrap: wrap;
+  gap: 8px 18px;
   min-height: 22px;
   padding: 10px 2px 0;
   color: var(--muted-bright);
