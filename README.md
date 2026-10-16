@@ -362,6 +362,8 @@ The Klipper configuration is identical for both interfaces. Only dashboard navig
 
 The dashboard opens on four compact views: **Live**, **History**, **Media**, and **Controls**. Its rolling recorder samples Moonraker locally every 10 seconds, retains 24 hours, and writes `history.json` outside the Git checkout. On the standard MainsailOS layout that file is `~/printer_data/nevermore-dashboard/history.json`.
 
+**History → UV LED** plots UV LED temperature (left °C axis) and outlet SGP40 VOC Index (right axis), with the existing recorded UV ON/OFF markers and active shading. The tooltip shows both measurements at each sample. The VOC index is a relative sensor output, not a direct measurement of UV efficacy: inlet VOC, fan speed, filter media, changing emissions and sensor response can also explain outlet changes. The existing recorder already stores both readings; no recorder or Klipper configuration change is needed.
+
 The browser connects through the local Nginx WebSocket proxy. The installer adds the exact `http://PRINTER_HOST:7131` origin to Moonraker's `[authorization] cors_domains` list without replacing existing entries. It also keeps the selected endpoint in that browser's local storage; use the **Connection** button to change it. Add `?demo=1` to the URL to preview simulated states without a printer.
 
 Custom dashboard ports are supported:

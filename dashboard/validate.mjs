@@ -105,6 +105,9 @@ assert(app.includes("cleanHistorySeries"), "Existing-history cleanup is missing"
 assert(app.includes("MAX_CHART_GAP_MS"), "Restart gaps are not preserved in chart rendering");
 assert(app.includes("outputHistoryEvents"), "History charts do not detect UV/Peltier output state transitions");
 assert(app.includes("outputHistoryKey"), "History charts do not select the UV/Peltier state source");
+assert(app.includes('label: "VOC outlet (index)"') && app.includes('axis: "voc"'),
+  "UV history graph is missing outlet VOC with its separate scale");
+assert(app.includes("yForVoc"), "UV outlet VOC history is not drawn against an independent scale");
 assert(app.includes("ON/OFF event lines"), "Output-history chart marker legend is missing");
 assert(app.includes("ventOpen"), "Dashboard does not expose commanded vent state");
 assert(app.includes("peltierCooldown"), "Dashboard does not expose Peltier cooldown state");
