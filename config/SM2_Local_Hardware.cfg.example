@@ -59,7 +59,7 @@ variable_peltier_cold_max_temp: 60
 # verified hardware-specific thermal limits, and a vent servo.
 # Below are illustrative *air temperature* control setpoints, not Peltier
 # safety ratings. OFF must be less than ON. Chamber/vent cooling and
-# VOC emergency airflow override the cooler.
+# VOC emergency filtration can inhibit the cooler; VOC does not open the vent.
 variable_peltier_auto_enabled: 0
 variable_peltier_auto_on_temp: 45
 variable_peltier_auto_off_temp: 40
