@@ -2261,6 +2261,42 @@
     if (target) hideHelp(target);
   });
 
+  els.annotationOpen.addEventListener("click", () => {
+    if (state.isDemo || state.connection !== "live") {
+      showToast("Connect to the live printer to save a history event.");
+      return;
+    }
+    els.annotationTime.value = localDateTimeValue();
+    els.annotationKind.value = "garage-open";
+    els.annotationNote.value = "";
+    els.annotationNote.disabled = true;
+    els.annotationDialog.showModal();
+  });
+  els.annotationKind.addEventListener("change", () => {
+    els.annotationNote.disabled = els.annotationKind.value !== "note";
+  });
+  els.annotationForm.addEventListener("submit", addAnnotation);
+  $("annotationCancel").addEventListener("click", () => els.annotationDialog.close());
+  document.querySelector(".annotation-list").addEventListener("click", async (event) => {
+    const remove = event.target.closest("[data-annotation-remove]");
+    if (!remove) return;
+    const item = state.annotations.find((entry) => entry.id === remove.dataset.annotationRemove);
+    if (!item) return;
+    const confirmed = await askConfirmation({
+      eyebrow: "HISTORY ANNOTATION",
+      title: "Remove this event?",
+      message: item.label + " · " + new Date(item.t).toLocaleString(),
+      accept: "Remove event",
+    });
+    if (!confirmed) return;
+    try {
+      await saveAnnotations(state.annotations.filter((entry) => entry.id !== item.id));
+      showToast("History event removed.");
+    } catch (error) {
+      showToast("Event not removed: " + error.message);
+    }
+  });
+
   els.postPrintVentForm.addEventListener("submit", savePostPrintVentSettings);
   [els.postPrintVentTarget, els.postPrintVentMinutes].forEach((input) => {
     input.addEventListener("input", () => {
@@ -2308,6 +2344,7 @@
   setInterval(loadCollectorHistory, 60_000);
   setInterval(renderChart, 30_000);
   loadLocalFeatureState();
+  renderAnnotationList();
   setCurrentView("live");
   render();
 
