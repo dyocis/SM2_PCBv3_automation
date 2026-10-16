@@ -23,7 +23,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Dashboard installation now configures the Nginx history route, exact Moonraker CORS origin, recorder service, and Mainsail link idempotently.
 - Uninstall removes only the CORS entry owned by this installer and preserves recorded history.
-- VOC emergency now prioritizes exhaust ventilation independently of Peltier hardware or status; automatic Peltier operation is controlled by chamber-air temperature instead of VOC emergency.
+- During automatic filtration, only material-profile chamber temperature and hysteresis open the exhaust; VOC emergency retains full fan/UV treatment without opening the vent by itself. Intentional post-print purge vent operation is unchanged. Automatic Peltier operation remains temperature-driven and independently inhibited by VOC emergency.
 - Filter fan demand remains at full speed while the Peltier is active, waiting for airflow, or completing its cooldown.
 
 ### Fixed
