@@ -368,6 +368,26 @@
           </div>
         </div>
 
+        <form class="post-print-vent-settings" id="postPrintVentForm" aria-labelledby="postPrintVentTitle">
+          <div class="post-print-vent-heading">
+            <div>
+              <span class="eyebrow">CHAMBER COOLING</span>
+              <h3 id="postPrintVentTitle">Post-print exhaust limits</h3>
+            </div>
+            <strong id="postPrintVentCurrent">35°C · 60 min</strong>
+          </div>
+          <div class="post-print-vent-fields">
+            <label for="postPrintVentTarget">Close at temperature
+              <span class="field-inline"><input id="postPrintVentTarget" type="number" inputmode="decimal" min="20" max="80" step="0.1" value="35" required><span>°C</span></span>
+            </label>
+            <label for="postPrintVentMinutes">Maximum vent runtime
+              <span class="field-inline"><input id="postPrintVentMinutes" type="number" inputmode="numeric" min="0" max="240" step="1" value="60" required><span>min</span></span>
+            </label>
+            <button class="secondary-button" id="postPrintVentSave" type="submit">Save limits</button>
+          </div>
+          <p id="postPrintVentNote">Vent closes at the temperature target or time limit, whichever comes first. Set runtime to 0 to disable post-print venting. Changes apply to the next post-print cycle.</p>
+        </form>
+
         <div class="control-footnote">
           Peltier requests require the vent closed, its movement delay complete, and at least 2,000 RPM. Opening the vent turns the Peltier off and, when needed, waits through a 60-second fan cooldown. Vent position is commanded because no physical flap-position sensor is installed.
         </div>
