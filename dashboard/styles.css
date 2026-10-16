@@ -1665,6 +1665,77 @@ button {
 
 .chart-legend span { display: inline-flex; gap: 6px; align-items: center; }
 
+.annotation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.annotation-toolbar strong {
+  display: block;
+  font-size: .74rem;
+}
+
+.annotation-toolbar small {
+  display: block;
+  max-width: 440px;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: .68rem;
+  line-height: 1.4;
+}
+
+.annotation-toolbar button { flex: 0 0 auto; }
+
+.annotation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.annotation-entry {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border: 1px solid rgba(211,182,250,.25);
+  border-radius: 8px;
+  color: var(--muted-bright);
+  font-size: .67rem;
+}
+
+.annotation-entry button {
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: #d3b6fa;
+  font-size: .65rem;
+  cursor: pointer;
+}
+
+#annotationForm select,
+#annotationForm input {
+  width: 100%;
+  min-height: 39px;
+  margin: 5px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #111518;
+  color: #fff;
+}
+
+#annotationForm input:disabled { opacity: .5; }
+
+@media (max-width: 620px) {
+  .annotation-toolbar { align-items: stretch; flex-direction: column; }
+  .annotation-toolbar button { align-self: flex-start; }
+}
+
 .control-console {
   position: relative;
   overflow: hidden;
