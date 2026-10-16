@@ -1215,7 +1215,11 @@
     const definition = chartDefinition(state.historyMetric, samples);
     const outputKey = outputHistoryKey(state.historyMetric);
     const outputEvents = outputHistoryEvents(samples, outputKey);
-    const values = definition.series.flatMap((series) => series.values.filter(validNumber));
+    // Keep the UV thermistor on the left °C scale and the outlet VOC Index
+    // on a separate right scale. Mixing both into one range hides changes.
+    const primarySeries = definition.series.filter((series) => series.axis !== "voc");
+    const secondarySeries = definition.series.filter((series) => series.axis === "voc");
+    const values = primarySeries.flatMap((series) => series.values.filter(validNumber));
     if (definition.thresholds) values.push(...definition.thresholds.map((item) => item.value).filter(validNumber));
     if (!values.length) {
       els.chartEmpty.hidden = false;
@@ -1234,9 +1238,14 @@
     max += span * 0.12;
     if (state.historyMetric === "voc" || state.historyMetric === "pressure") min = Math.max(0, min);
 
-    const plot = { left: 52, right: rect.width - 18, top: 18, bottom: rect.height - 34 };
+    const vocValues = secondarySeries.flatMap((series) => series.values.filter(validNumber));
+    const vocMax = secondarySeries.length
+      ? Math.min(500, Math.max(60, Math.ceil(Math.max(0, ...vocValues) * 1.1 / 20) * 20))
+      : null;
+    const plot = { left: 52, right: rect.width - (secondarySeries.length ? 58 : 18), top: 18, bottom: rect.height - 34 };
     const xFor = (time) => plot.left + ((time - start) / (end - start)) * (plot.right - plot.left);
     const yFor = (value) => plot.bottom - ((value - min) / (max - min)) * (plot.bottom - plot.top);
+    const yForVoc = (value) => plot.bottom - (value / vocMax) * (plot.bottom - plot.top);
 
     ctx.lineWidth = 1;
     ctx.font = "11px Inter, system-ui, sans-serif";
@@ -1250,6 +1259,15 @@
       ctx.lineTo(plot.right, y);
       ctx.stroke();
       ctx.fillText(formatChartValue(value, state.historyMetric), 4, y + 4);
+    }
+    if (secondarySeries.length) {
+      ctx.fillStyle = "#45d8ff";
+      ctx.fillText("VOC", plot.right + 8, plot.top - 5);
+      for (let row = 0; row <= 4; row += 1) {
+        const y = plot.top + (plot.bottom - plot.top) * row / 4;
+        ctx.fillText(String(Math.round(vocMax * (1 - row / 4))), plot.right + 8, y + 4);
+      }
+      ctx.fillStyle = "#76828a";
     }
     for (let column = 0; column <= 4; column += 1) {
       const x = plot.left + (plot.right - plot.left) * column / 4;
@@ -1320,7 +1338,7 @@
         }
         if (index > 0 && point.t - samples[index - 1].t > MAX_CHART_GAP_MS) drawing = false;
         const x = xFor(point.t);
-        const y = yFor(value);
+        const y = series.axis === "voc" ? yForVoc(value) : yFor(value);
         if (!drawing) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
         drawing = true;
@@ -1375,7 +1393,7 @@
       els.chartLegend.appendChild(item);
     }
 
-    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents, outputKey };
+    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents, outputKey, vocMax };
   }
 
   function chartDefinition(metric, samples) {
@@ -1401,7 +1419,10 @@
     }
     if (metric === "uv-led") {
       return {
-        series: [{ label: "UV LED °C", color: "#ff7954", values: samples.map((point) => point.uvt) }],
+        series: [
+          { label: "UV LED °C", color: "#ff7954", values: samples.map((point) => point.uvt) },
+          { label: "VOC outlet (index)", color: "#45d8ff", axis: "voc", values: samples.map((point) => point.vo) },
+        ],
         thresholds: [],
       };
     }
@@ -1450,7 +1471,7 @@
     });
     const index = meta.samples.indexOf(nearest);
     const rows = meta.definition.series.map((series) => {
-      return "<span><i style=\"background:" + series.color + "\"></i>" + series.label + " <strong>" + formatChartValue(series.values[index], state.historyMetric) + "</strong></span>";
+      return "<span><i style=\"background:" + series.color + "\"></i>" + series.label + " <strong>" + formatChartValue(series.values[index], series.axis === "voc" ? "voc" : state.historyMetric) + "</strong></span>";
     }).join("");
     const vent = nearest.vent === 1 ? "OPEN" : nearest.vent === 0 ? "CLOSED" : "UNKNOWN";
     const calibration = nearest.cal === 1
