@@ -23,7 +23,7 @@ const history = [
   point(200),
   point(190, { uv: 1 }),
   point(180, { uv: 1, pel: 1 }),
-  point(170, { uv: 1, pel: 1 }),
+  point(170, { uv: 1, pel: 1, vi: 240, vo: 210 }),
   point(160, { pel: 1 }),
   point(150),
   point(80, { uv: 1, pel: 1 }),
@@ -103,6 +103,16 @@ function checkMetric(button, expectedKey, expectedIndices) {
 }
 
 const uv = checkMetric(uvButton, "uv", [1, 4, 8, 10]);
+const uvVoc = uv.definition.series.find((series) => series.label === "VOC outlet (index)");
+assert(uvVoc?.axis === "voc", "UV chart does not use a separate outlet VOC axis");
+assert(uvVoc.values[3] === 210, "UV chart did not read the recorded VOC outlet field");
+assert(uv.definition.series[0].values[3] === 42, "UV LED temperature trace changed");
+assert(uv.vocMax >= 210 && uv.vocMax <= 500, "VOC axis did not scale to its recorded range");
+assert(uv.plot.right === 900 - 58, "UV chart did not reserve room for right-side VOC labels");
+assert(byId("chartLegend").textContent.includes("VOC outlet (index)"),
+  "UV chart is missing VOC outlet legend");
+assert(canvasCalls.some((item) => item[0] === "text" && item[1] === "VOC"),
+  "UV chart is missing its VOC axis title");
 assert(!uv.outputEvents.some((event) => event.index === 12),
   "Unknown UV state falsely inferred a shutoff");
 const on = uv.outputEvents[0];
@@ -113,10 +123,15 @@ canvas.dispatchEvent(new window.MouseEvent("pointermove", {
 }));
 assert(byId("chartTooltip").textContent.includes("UV LEDs"),
   "UV tooltip missing output state");
+assert(byId("chartTooltip").textContent.includes("VOC outlet (index)") &&
+  byId("chartTooltip").textContent.includes("80"),
+  "UV tooltip missing outlet VOC Index reading");
 assert(byId("chartTooltip").textContent.includes("Recorded transition"),
   "UV tooltip missing state-change information");
 
 const peltier = checkMetric(peltierButton, "pel", [2, 5, 8, 12]);
+assert(peltier.vocMax === null && !peltier.definition.series.some((series) => series.axis === "voc"),
+  "Peltier temperature chart unexpectedly received VOC overlay");
 assert(!peltier.outputEvents.some((event) => event.index === 10),
   "Unknown Peltier state falsely inferred startup");
 const off = peltier.outputEvents.at(-1);
@@ -134,6 +149,7 @@ window.document.querySelector('[data-metric="voc"]').click();
 assert(canvas._chartMeta.outputKey === null, "VOC chart received output-event markings");
 assert(canvas._chartMeta.outputEvents.length === 0,
   "VOC chart accidentally included output transitions");
+assert(canvas._chartMeta.vocMax === null, "Ordinary VOC graph unexpectedly uses two axes");
 
 dom.window.close();
-console.log("UV and Peltier charts verified active periods, ON/OFF markers, tooltips, and gap-safe transitions.");
+console.log("UV and Peltier event history verified; UV also overlays outlet VOC Index on a separate axis.");
