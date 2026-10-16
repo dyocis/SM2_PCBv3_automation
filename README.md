@@ -46,6 +46,20 @@ variable_post_print_vent_max_minutes: 60
 
 The temperature target accepts 20–80°C; maximum runtime accepts 0–240 minutes, with `0` disabling automatic post-print vent cooling. Invalid settings fail closed. Existing private configurations that omit these settings safely use the defaults. During an **active print**, vent opening follows the material-specific `chamber_target` and its hysteresis, with no post-print time cap. `NEVERMORE_STATUS` reports the post-print vent window state and its configured limits.
 
+#### Change post-print exhaust limits without editing configuration
+
+You can adjust the settings from the dashboard **Controls → Post-print exhaust limits** section. Unlock the controls, enter the new close temperature and maximum runtime, select **Save limits**, and confirm. The dashboard reads the current values back through Moonraker/Klipper status and calls the same macro below; it does not directly control the vent.
+
+Or run this in the Mainsail/Fluidd G-code console:
+
+```gcode
+NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=35 MAX_MINUTES=60
+```
+
+You can supply either parameter independently, for example `NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=38`, to preserve the current runtime limit. Invalid or nonnumeric values are rejected by Klipper. **Settings take effect on the next post-print cycle**, without altering the active vent window. To disable only automatic post-print exhaust, use `MAX_MINUTES=0`; internal VOC-driven filtration and UV treatment remain independent.
+
+If the printer already has a `[save_variables]` section, the command also persists both settings across Klipper restarts. Saved overrides take precedence over local-file defaults; `NEVERMORE_POST_PRINT_VENT_LOAD_SETTINGS` loads them at Klipper startup. Without `[save_variables]`, the macro still changes the current running settings, but reports that the changes won't persist across a restart. This package does not automatically create or modify the printer's `[save_variables]` section.
+
 ## Dashboard demonstration
 
 The optional browser dashboard provides **Live**, **History**, **Media**, and **Controls** views for monitoring and managing the Nevermore StealthMax V2. Available controls and readings depend on the installed hardware and local configuration.
