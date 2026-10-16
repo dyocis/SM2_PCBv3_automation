@@ -38,6 +38,7 @@ def build(
     demand=0, active=0, pending=0, cooldown=0, installed=True,
     print_active=1, chamber_target=55.0, chamber_latched=0,
     auto_mode=1, manual_override=0, purge_active=0, fault=0,
+    post_vent_active=0, post_vent_target=35, post_vent_minutes=60,
 ):
     p = make_printer(
         installed=installed, enabled=bool(thermal_enabled),
@@ -47,6 +48,10 @@ def build(
     sm.update({
         "auto_mode": auto_mode, "manual_override": manual_override,
         "purge_active": purge_active, "fault": fault,
+        "post_print_vent_active": post_vent_active,
+        "sgp40_calibration_reset_applied": 0,
+        "sgp40_calibration_phase": "IDLE",
+        "sgp40_calibration_hold": 0,
         "print_active": print_active, "peltier_auto_demand": demand,
         "peltier_auto_state": "STANDBY", "auto_reason": "PRINT FILTRATION",
         "chamber_target": chamber_target, "chamber_hysteresis": 5,
@@ -59,6 +64,8 @@ def build(
         "peltier_auto_enabled": auto_enabled,
         "peltier_auto_on_temp": 45,
         "peltier_auto_off_temp": 40,
+        "post_print_vent_target_temp": post_vent_target,
+        "post_print_vent_max_minutes": post_vent_minutes,
     })
     p["temperature_sensor BME_IN"] = {"temperature": temp}
     p["temperature_sensor SGP_IN"] = {"temperature": voc}
@@ -86,23 +93,42 @@ class PeltierAutoTests(unittest.TestCase):
         self.assertIn("NEVERMORE_AUTO_PELTIER ALLOW=0", emergency)
         self.assertNotIn("NEVERMORE_PELTIER VALUE=1", emergency)
 
-    def test_vent_opens_only_for_chamber_temperature_during_auto(self):
-        # Test all VOC bands while below the selected filament profile limit.
+    def test_vent_opens_only_for_print_chamber_temperature_not_vocs(self):
         for voc in (8, 150, 290, 480):
             with self.subTest(voc=voc, temp=47):
-                result = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=voc))
-                self.assertIn("VENT_CLOSE AUTO=1", result)
-                self.assertNotIn("VENT_OPEN AUTO=1", result)
-
-        # A high VOC emergency must not hide a real temperature request.
-        for voc in (8, 150, 290, 480):
+                output = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=voc))
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+                self.assertNotIn("VENT_OPEN AUTO=1", output)
             with self.subTest(voc=voc, temp=60):
-                result = render("NEVERMORE_AUTO_CONTROL", build(temp=60, voc=voc))
-                self.assertIn("VENT_OPEN AUTO=1", result)
-                self.assertNotIn("VENT_CLOSE AUTO=1", result)
+                output = render("NEVERMORE_AUTO_CONTROL", build(temp=60, voc=voc))
+                self.assertIn("VENT_OPEN AUTO=1", output)
+                self.assertNotIn("VENT_CLOSE AUTO=1", output)
+
+        # After post-print cooling is finished or timed out, ordinary
+        # filtration must never reopen the vent merely because it is hot.
+        for voc in (8, 150, 290, 480):
+            with self.subTest(voc=voc, after_print=True):
+                output = render("NEVERMORE_AUTO_CONTROL",
+                                build(temp=65, voc=voc, print_active=0))
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+                self.assertNotIn("VENT_OPEN AUTO=1", output)
+
+    def test_high_voc_uses_guarded_uv_during_print_not_exhaust(self):
+        for voc in (240, 480):
+            with self.subTest(voc=voc):
+                output = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=voc))
+                self.assertIn("NEVERMORE_FILTER SPEED=1", output)
+                self.assertIn("NEVERMORE_UV VALUE=1 AUTO=1", output)
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+        low = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=10))
+        self.assertIn("NEVERMORE_UV VALUE=0 AUTO=1", low)
+
+        # The temperature target may still demand exhaust regardless of UV.
+        hot = render("NEVERMORE_AUTO_CONTROL", build(temp=60, voc=290))
+        self.assertIn("NEVERMORE_UV VALUE=1 AUTO=1", hot)
+        self.assertIn("VENT_OPEN AUTO=1", hot)
 
     def test_chamber_hysteresis_and_material_target_apply_in_voc_emergency(self):
-        # ASA profile: 60C ON, 55C OFF with five degrees hysteresis.
         for temp, latched, expected_open in (
             (59.9, 0, False), (60.0, 0, True),
             (58.0, 1, True), (55.1, 1, True), (55.0, 1, False),
@@ -114,19 +140,91 @@ class PeltierAutoTests(unittest.TestCase):
                 self.assertIn("VENT_OPEN AUTO=1" if expected_open else "VENT_CLOSE AUTO=1", output)
                 self.assertNotIn("VENT_CLOSE AUTO=1" if expected_open else "VENT_OPEN AUTO=1", output)
 
-    def test_post_print_purge_keeps_exhaust_as_intended(self):
-        starting = render("NEVERMORE_PRINT_END", build(temp=34, voc=160))
-        self.assertIn("VARIABLE=purge_active VALUE=1", starting)
-        self.assertIn("VENT_OPEN AUTO=1", starting)
-        for voc in (140, 290, 480):
+    def test_post_print_vent_starts_above_target_with_independent_timer(self):
+        start = render("NEVERMORE_PRINT_END", build(temp=48, voc=10))
+        self.assertIn("VARIABLE=purge_active VALUE=1", start)
+        self.assertIn("NEVERMORE_POST_PRINT_VENT_START", start)
+        self.assertNotIn("VENT_OPEN AUTO=1", start)
+
+        for voc in (0, 140, 290, 480):
             with self.subTest(voc=voc):
+                window = render("NEVERMORE_POST_PRINT_VENT_START",
+                                build(temp=48, voc=voc))
+                self.assertIn("VARIABLE=post_print_vent_active VALUE=1", window)
+                self.assertIn("VENT_OPEN AUTO=1", window)
+                self.assertIn("ID=NEVERMORE_POST_PRINT_VENT_TIMEOUT DURATION=3600.0", window)
+
+    def test_post_print_vent_does_not_open_when_cooled_or_disabled(self):
+        for changes in (
+            {"temp": 35},
+            {"temp": 32},
+            {"post_vent_minutes": 0},
+            {"post_vent_minutes": -3},
+            {"post_vent_minutes": 500},
+            {"post_vent_target": 150},
+        ):
+            with self.subTest(changes=changes):
+                output = render("NEVERMORE_POST_PRINT_VENT_START", build(voc=490, **changes))
+                self.assertNotIn("VENT_OPEN AUTO=1", output)
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+                self.assertIn("VARIABLE=post_print_vent_active VALUE=0", output)
+
+    def test_post_print_timeout_closes_vent_independent_of_voc(self):
+        for voc in (0, 140, 290, 480):
+            with self.subTest(voc=voc):
+                output = render("NEVERMORE_POST_PRINT_VENT_TIMEOUT",
+                                build(temp=48, voc=voc, print_active=0,
+                                      purge_active=1, post_vent_active=1))
+                self.assertIn("VARIABLE=post_print_vent_active VALUE=0", output)
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+                self.assertNotIn("NEVERMORE_OFF", output)
+
+    def test_post_print_purge_treats_voc_without_controlling_vent(self):
+        # Temperature alone decides whether an active window stays open.
+        for voc in (0, 140, 290, 480):
+            with self.subTest(voc=voc, vent_window=True):
                 purge = render("NEVERMORE_PURGE_CONTROL",
-                               build(temp=34, voc=voc, purge_active=1, print_active=0))
+                               build(temp=48, voc=voc, purge_active=1,
+                                     print_active=0, post_vent_active=1))
                 self.assertIn("VENT_OPEN AUTO=1", purge)
+                self.assertNotIn("VENT_CLOSE AUTO=1", purge)
+                self.assertIn("NEVERMORE_FILTER SPEED=1", purge)
+                self.assertNotIn("VARIABLE=purge_active VALUE=0", purge)
+
+            with self.subTest(voc=voc, vent_window=False):
+                purge = render("NEVERMORE_PURGE_CONTROL",
+                               build(temp=48, voc=voc, purge_active=1,
+                                     print_active=0, post_vent_active=0))
+                self.assertIn("VENT_CLOSE AUTO=1", purge)
+                self.assertNotIn("VENT_OPEN AUTO=1", purge)
+                if voc >= 220:
+                    self.assertIn("NEVERMORE_UV VALUE=1 AUTO=1", purge)
+                    self.assertIn("NEVERMORE_FILTER SPEED=1", purge)
+
+    def test_post_print_temperature_recovery_ends_vent_before_timeout(self):
+        for voc in (0, 140, 290, 480):
+            with self.subTest(voc=voc):
+                output = render("NEVERMORE_PURGE_CONTROL",
+                                build(temp=35, voc=voc, purge_active=1,
+                                      print_active=0, post_vent_active=1))
+                self.assertIn("VARIABLE=post_print_vent_active VALUE=0", output)
+                self.assertIn("ID=NEVERMORE_POST_PRINT_VENT_TIMEOUT DURATION=0", output)
+                self.assertIn("VENT_CLOSE AUTO=1", output)
+                self.assertNotIn("VENT_OPEN AUTO=1", output)
+
         done = render("NEVERMORE_PURGE_CONTROL",
-                      build(temp=34, voc=0, purge_active=1, print_active=0))
+                      build(temp=34, voc=0, purge_active=1,
+                            print_active=0, post_vent_active=0))
         self.assertIn("NEVERMORE_OFF", done)
         self.assertIn("VARIABLE=purge_active VALUE=0", done)
+
+    def test_new_print_or_manual_handover_cancels_old_timeout(self):
+        for name in ("NEVERMORE_PRINT_START", "NEVERMORE_MANUAL", "NEVERMORE_AUTO_ENABLE", "NEVERMORE_AUTO_DISABLE"):
+            with self.subTest(macro=name):
+                output = render(name, build(temp=48, voc=0, purge_active=1,
+                                            post_vent_active=1))
+                self.assertIn("ID=NEVERMORE_POST_PRINT_VENT_TIMEOUT DURATION=0", output)
+                self.assertIn("VARIABLE=post_print_vent_active VALUE=0", output)
 
     def test_on_threshold_is_independent_of_normal_voc_bands(self):
         # No VOC index is read by the cooler macro.
