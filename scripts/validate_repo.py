@@ -166,17 +166,19 @@ def validate_configs(errors: list[str]) -> None:
             fail(errors, f"undefined delayed_gcode ID: {delayed_id}")
 
     object_reference = re.compile(r'printer\["([^"]+)"\]')
-    optional_thermistor_references = {
+    optional_runtime_references = {
         "temperature_sensor SM_Peltier_Hot_Side",
         "temperature_sensor SM_Peltier_Cold_Side",
         "temperature_sensor SM_UV_LEDs",
+        # Persistence is optional; the automation guards the reference.
+        "save_variables",
     }
     for object_name in sorted(set(object_reference.findall(all_content))):
         if object_name.lower() in defined_sections:
             continue
-        # These sensors are intentionally not defined in the public default.
+        # These objects are intentionally not defined in the public default.
         # Klipper runtime guards must verify optional objects before reading.
-        if (object_name in optional_thermistor_references
+        if (object_name in optional_runtime_references
                 and f'"{object_name}" in printer' in all_content):
             continue
         fail(errors, f"undefined Klipper object reference: {object_name}")
