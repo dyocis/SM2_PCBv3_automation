@@ -49,6 +49,9 @@ def build(
         "auto_mode": auto_mode, "manual_override": manual_override,
         "purge_active": purge_active, "fault": fault,
         "post_print_vent_active": post_vent_active,
+        "post_print_vent_target_temp": post_vent_target,
+        "post_print_vent_max_minutes": post_vent_minutes,
+        "post_print_vent_window_target": post_vent_target,
         "sgp40_calibration_reset_applied": 0,
         "sgp40_calibration_phase": "IDLE",
         "sgp40_calibration_hold": 0,
@@ -217,6 +220,80 @@ class PeltierAutoTests(unittest.TestCase):
                             print_active=0, post_vent_active=0))
         self.assertIn("NEVERMORE_OFF", done)
         self.assertIn("VARIABLE=purge_active VALUE=0", done)
+
+    def test_config_macro_updates_runtime_without_activating_exhaust(self):
+        printer = build()
+        result = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", printer,
+                        TARGET="38.5", MAX_MINUTES="90")
+        self.assertIn("VARIABLE=post_print_vent_target_temp VALUE=38.5", result)
+        self.assertIn("VARIABLE=post_print_vent_max_minutes VALUE=90.0", result)
+        self.assertNotIn("SAVE_VARIABLE", result)
+        self.assertIn("Add [save_variables]", result)
+        self.assertNotIn("VENT_OPEN", result)
+        self.assertNotIn("UPDATE_DELAYED_GCODE ID=NEVERMORE_POST_PRINT_VENT_TIMEOUT", result)
+
+        # Omitting one or both parameters leaves the existing values alone.
+        target_only = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", printer, TARGET="40")
+        self.assertIn("VARIABLE=post_print_vent_max_minutes VALUE=60.0", target_only)
+        unchanged = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", printer)
+        self.assertIn("VARIABLE=post_print_vent_target_temp VALUE=35.0", unchanged)
+
+    def test_config_macro_persists_overrides_when_save_variables_is_installed(self):
+        printer = build()
+        printer["save_variables"] = {"variables": {}}
+        result = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", printer,
+                        TARGET="36", MAX_MINUTES="75")
+        self.assertIn("SAVE_VARIABLE VARIABLE=nm_post_print_vent_target_temp VALUE=36.0", result)
+        self.assertIn("SAVE_VARIABLE VARIABLE=nm_post_print_vent_max_minutes VALUE=75.0", result)
+        self.assertIn("Applies to next post-print cycle", result)
+
+    def test_config_macro_rejects_bad_values_without_side_effects(self):
+        for target, minutes in (("19", "60"), ("81", "60"), ("35", "-1"),
+                                ("35", "241"), ("none", "60"), ("35", "bad"),
+                                ("nan", "30"), ("35", "inf")):
+            with self.subTest(target=target, minutes=minutes):
+                result = render("NEVERMORE_POST_PRINT_VENT_SETTINGS",
+                                build(), TARGET=target, MAX_MINUTES=minutes)
+                self.assertIn("Post-print vent settings rejected", result)
+                self.assertNotIn("SET_GCODE_VARIABLE MACRO=SM_LED_STATE VARIABLE=post_print_vent_target_temp", result)
+                self.assertNotIn("SAVE_VARIABLE", result)
+        zero = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", build(),
+                      TARGET="35", MAX_MINUTES="0")
+        self.assertIn("VALUE=0.0", zero)
+
+    def test_saved_override_loading_and_safe_fallback(self):
+        printer = build()
+        printer["gcode_macro SM2_SETTINGS"].update({
+            "post_print_vent_target_temp": 37.5,
+            "post_print_vent_max_minutes": 80,
+        })
+        result = render("NEVERMORE_POST_PRINT_VENT_LOAD_SETTINGS", printer)
+        self.assertIn("VARIABLE=post_print_vent_target_temp VALUE=37.5", result)
+        self.assertIn("VARIABLE=post_print_vent_max_minutes VALUE=80.0", result)
+
+        printer["save_variables"] = {"variables": {
+            "nm_post_print_vent_target_temp": 41,
+            "nm_post_print_vent_max_minutes": 105,
+        }}
+        loaded = render("NEVERMORE_POST_PRINT_VENT_LOAD_SETTINGS", printer)
+        self.assertIn("VARIABLE=post_print_vent_target_temp VALUE=41.0", loaded)
+        self.assertIn("VARIABLE=post_print_vent_max_minutes VALUE=105.0", loaded)
+
+        printer["save_variables"]["variables"]["nm_post_print_vent_target_temp"] = 500
+        printer["save_variables"]["variables"]["nm_post_print_vent_max_minutes"] = -9
+        recovered = render("NEVERMORE_POST_PRINT_VENT_LOAD_SETTINGS", printer)
+        self.assertIn("VARIABLE=post_print_vent_target_temp VALUE=37.5", recovered)
+        self.assertIn("VARIABLE=post_print_vent_max_minutes VALUE=80.0", recovered)
+
+    def test_window_uses_snapshot_of_target_not_midcycle_changes(self):
+        printer = build(temp=44, post_vent_target=35, post_vent_minutes=30,
+                        print_active=0, purge_active=1, post_vent_active=1)
+        started = render("NEVERMORE_POST_PRINT_VENT_START", printer)
+        self.assertIn("VARIABLE=post_print_vent_window_target VALUE=35.0", started)
+        printer["gcode_macro SM_LED_STATE"]["post_print_vent_target_temp"] = 55
+        purge = render("NEVERMORE_PURGE_CONTROL", printer)
+        self.assertIn("VENT_OPEN AUTO=1", purge)
+        self.assertNotIn("VARIABLE=post_print_vent_active VALUE=0", purge)
 
     def test_new_print_or_manual_handover_cancels_old_timeout(self):
         for name in ("NEVERMORE_PRINT_START", "NEVERMORE_MANUAL", "NEVERMORE_AUTO_ENABLE", "NEVERMORE_AUTO_DISABLE"):
