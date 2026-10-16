@@ -74,16 +74,59 @@ def render(name: str, printer: dict, **params: object) -> str:
 
 
 class PeltierAutoTests(unittest.TestCase):
-    def test_automation_routes_voc_emergency_to_vent_not_peltier(self):
+    def test_voc_emergency_preserves_treatment_without_automatic_exhaust(self):
         normal = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=10))
         self.assertIn("NEVERMORE_AUTO_PELTIER ALLOW=1", normal)
         self.assertNotIn("NEVERMORE_PELTIER VALUE=1", normal)
         emergency = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=480))
         self.assertIn("NEVERMORE_FILTER SPEED=1", emergency)
         self.assertIn("NEVERMORE_UV VALUE=1 AUTO=1", emergency)
-        self.assertIn("VENT_OPEN AUTO=1", emergency)
+        self.assertIn("VENT_CLOSE AUTO=1", emergency)
+        self.assertNotIn("VENT_OPEN AUTO=1", emergency)
         self.assertIn("NEVERMORE_AUTO_PELTIER ALLOW=0", emergency)
         self.assertNotIn("NEVERMORE_PELTIER VALUE=1", emergency)
+
+    def test_vent_opens_only_for_chamber_temperature_during_auto(self):
+        # Test all VOC bands while below the selected filament profile limit.
+        for voc in (8, 150, 290, 480):
+            with self.subTest(voc=voc, temp=47):
+                result = render("NEVERMORE_AUTO_CONTROL", build(temp=47, voc=voc))
+                self.assertIn("VENT_CLOSE AUTO=1", result)
+                self.assertNotIn("VENT_OPEN AUTO=1", result)
+
+        # A high VOC emergency must not hide a real temperature request.
+        for voc in (8, 150, 290, 480):
+            with self.subTest(voc=voc, temp=60):
+                result = render("NEVERMORE_AUTO_CONTROL", build(temp=60, voc=voc))
+                self.assertIn("VENT_OPEN AUTO=1", result)
+                self.assertNotIn("VENT_CLOSE AUTO=1", result)
+
+    def test_chamber_hysteresis_and_material_target_apply_in_voc_emergency(self):
+        # ASA profile: 60C ON, 55C OFF with five degrees hysteresis.
+        for temp, latched, expected_open in (
+            (59.9, 0, False), (60.0, 0, True),
+            (58.0, 1, True), (55.1, 1, True), (55.0, 1, False),
+        ):
+            with self.subTest(temp=temp, latched=latched):
+                output = render("NEVERMORE_AUTO_CONTROL",
+                                build(temp=temp, voc=480,
+                                      chamber_target=60.0, chamber_latched=latched))
+                self.assertIn("VENT_OPEN AUTO=1" if expected_open else "VENT_CLOSE AUTO=1", output)
+                self.assertNotIn("VENT_CLOSE AUTO=1" if expected_open else "VENT_OPEN AUTO=1", output)
+
+    def test_post_print_purge_keeps_exhaust_as_intended(self):
+        starting = render("NEVERMORE_PRINT_END", build(temp=34, voc=160))
+        self.assertIn("VARIABLE=purge_active VALUE=1", starting)
+        self.assertIn("VENT_OPEN AUTO=1", starting)
+        for voc in (140, 290, 480):
+            with self.subTest(voc=voc):
+                purge = render("NEVERMORE_PURGE_CONTROL",
+                               build(temp=34, voc=voc, purge_active=1, print_active=0))
+                self.assertIn("VENT_OPEN AUTO=1", purge)
+        done = render("NEVERMORE_PURGE_CONTROL",
+                      build(temp=34, voc=0, purge_active=1, print_active=0))
+        self.assertIn("NEVERMORE_OFF", done)
+        self.assertIn("VARIABLE=purge_active VALUE=0", done)
 
     def test_on_threshold_is_independent_of_normal_voc_bands(self):
         # No VOC index is read by the cooler macro.
