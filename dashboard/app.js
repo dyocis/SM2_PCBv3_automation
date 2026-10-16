@@ -75,7 +75,8 @@
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
       "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "uvLedTemp", "uvThermalState", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
-      "clearFaultButton", "peltierFaultResetButton", "uvFaultResetButton", "confirmDialog", "confirmForm", "confirmEyebrow",
+      "clearFaultButton", "peltierFaultResetButton", "uvFaultResetButton", "postPrintVentForm", "postPrintVentTarget",
+      "postPrintVentMinutes", "postPrintVentSave", "postPrintVentCurrent", "postPrintVentNote", "confirmDialog", "confirmForm", "confirmEyebrow",
       "confirmTitle", "confirmMessage", "confirmAcceptButton", "workspaceTabs",
     ].map((id) => [id, $(id)])
   );
@@ -102,6 +103,8 @@
     collectorLifetime: null,
     controlsLocked: true,
     controlPending: false,
+    ventSettingsDirty: false,
+    ventSettingsAwaiting: null,
     unlockTimer: null,
     confirmResolver: null,
     databaseAvailable: false,
@@ -362,6 +365,9 @@
       chamberTarget,
       chamberOff: chamberTarget - chamberHysteresis,
       chamberHysteresis,
+      postPrintVentTarget: numberOr(sm.post_print_vent_target_temp, 35),
+      postPrintVentMinutes: numberOr(sm.post_print_vent_max_minutes, 60),
+      postPrintVentActive: truthy(sm.post_print_vent_active),
       pressureIn: numberOr(bmeInFull.pressure),
       pressureOut: numberOr(bmeOutFull.pressure),
       humidityIn: numberOr(bmeInFull.humidity),
@@ -612,6 +618,8 @@
         "gcode_macro SM_LED_STATE": {
           chamber_target: 60,
           chamber_hysteresis: 5,
+          post_print_vent_target_temp: 35,
+          post_print_vent_max_minutes: 60,
           voc_idle_hysteresis: 20,
           voc_warning: 120,
           voc_high: 220,
@@ -1053,6 +1061,19 @@
       : vm.peltierCooldown ? "COOLDOWN" : vm.peltierPending ? "WAITING" : "OFF";
     els.ventControlState.textContent = vm.ventOpen ? "OPEN" : "CLOSED";
     els.autoControlState.textContent = vm.automation && !vm.manual ? "AUTO" : "MANUAL";
+    els.postPrintVentCurrent.textContent = `${formatDecimal(vm.postPrintVentTarget)}°C · ${formatInteger(vm.postPrintVentMinutes)} min`;
+    if (state.ventSettingsAwaiting &&
+        Math.abs(vm.postPrintVentTarget - state.ventSettingsAwaiting.target) < 0.001 &&
+        Math.abs(vm.postPrintVentMinutes - state.ventSettingsAwaiting.minutes) < 0.001) {
+      state.ventSettingsAwaiting = null;
+    }
+    if (!state.ventSettingsDirty && !state.ventSettingsAwaiting) {
+      els.postPrintVentTarget.value = String(vm.postPrintVentTarget);
+      els.postPrintVentMinutes.value = String(vm.postPrintVentMinutes);
+    }
+    els.postPrintVentNote.textContent = vm.postPrintVentActive
+      ? "Post-print vent window is running. Changes apply to the next cycle; the current target and timeout stay unchanged."
+      : "Vent closes at the temperature target or time limit, whichever comes first. Runtime 0 disables post-print venting. Changes apply to the next cycle.";
     document.querySelector('[data-action="uv-toggle"]')?.setAttribute("aria-pressed", String(vm.uv));
     document.querySelector('[data-action="peltier-toggle"]')?.setAttribute("aria-pressed", String(vm.peltier));
     document.querySelector('[data-action="vent-toggle"]')?.setAttribute("aria-pressed", String(vm.ventOpen));
@@ -1073,6 +1094,10 @@
         : vm.rpm >= MIN_SAFE_RPM || (!vm.uv && !vm.peltier) ? "NOMINAL" : "CHECK AIRFLOW";
 
     const controlsAvailable = state.connection === "live" && !state.isDemo && !state.controlPending;
+    const ventSettingsAllowed = controlsAvailable && !state.controlsLocked && !vm.sgpCalibrationActive && !vm.sgpCalibrationHold;
+    els.postPrintVentTarget.disabled = !ventSettingsAllowed;
+    els.postPrintVentMinutes.disabled = !ventSettingsAllowed;
+    els.postPrintVentSave.disabled = !ventSettingsAllowed;
     document.querySelectorAll("[data-action]").forEach((button) => {
       const emergency = button.dataset.action === "emergency-off";
       const baselineRestartBlock = button.dataset.action === "resume-auto" && vm.sgpCalibrationResetApplied;
@@ -1423,6 +1448,47 @@
       showToast(kind === "peltier"
         ? "Carbon-cooler request accepted; the printer interlock controls final enable."
         : "PCO / UV enabled with verified airflow.");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      state.controlPending = false;
+      setControlsLocked(false);
+    }
+  }
+
+  async function savePostPrintVentSettings(event) {
+    event.preventDefault();
+    const vm = state.vm || buildViewModel();
+    if (state.controlsLocked || state.controlPending || state.isDemo || state.connection !== "live" ||
+        vm.sgpCalibrationActive || vm.sgpCalibrationHold) {
+      showToast("Unlock the live control panel before saving post-print exhaust settings.");
+      return;
+    }
+
+    const targetText = els.postPrintVentTarget.value.trim();
+    const minutesText = els.postPrintVentMinutes.value.trim();
+    const target = Number(targetText);
+    const minutes = Number(minutesText);
+    if (!targetText || !minutesText || !Number.isFinite(target) || target < 20 || target > 80 ||
+        !Number.isInteger(minutes) || minutes < 0 || minutes > 240) {
+      showToast("Enter a temperature of 20–80°C and a whole-number runtime of 0–240 minutes.");
+      return;
+    }
+
+    const confirmed = await askConfirmation({
+      eyebrow: "CHAMBER COOLING",
+      title: "Save post-print exhaust limits?",
+      message: `Close the exhaust at ${target}°C or after ${minutes} minutes, whichever comes first. A 0-minute limit disables automatic post-print venting. Changes will apply to the next cooling cycle; this will not operate the vent now.`,
+      accept: "Save limits",
+    });
+    if (!confirmed) return;
+    state.controlPending = true;
+    render();
+    try {
+      await runGcode(`NEVERMORE_POST_PRINT_VENT_SETTINGS TARGET=${target} MAX_MINUTES=${minutes}`);
+      state.ventSettingsDirty = false;
+      state.ventSettingsAwaiting = { target, minutes };
+      showToast("Exhaust settings accepted by Klipper; next post-print cycle will use the new limits.");
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -1900,6 +1966,14 @@
   document.addEventListener("focusout", (event) => {
     const target = event.target.closest("[data-help]");
     if (target) hideHelp(target);
+  });
+
+  els.postPrintVentForm.addEventListener("submit", savePostPrintVentSettings);
+  [els.postPrintVentTarget, els.postPrintVentMinutes].forEach((input) => {
+    input.addEventListener("input", () => {
+      state.ventSettingsDirty = true;
+      state.ventSettingsAwaiting = null;
+    });
   });
 
   els.newMediaButton.addEventListener("click", markNewMedia);
