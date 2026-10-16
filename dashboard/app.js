@@ -1166,6 +1166,32 @@
     if (state.currentView === "history") requestAnimationFrame(renderChart);
   }
 
+  function outputHistoryKey(metric) {
+    if (metric === "uv-led") return "uv";
+    if (metric === "peltier") return "pel";
+    return null;
+  }
+
+  function outputHistoryEvents(samples, key) {
+    if (!key) return [];
+    const events = [];
+    for (let index = 1; index < samples.length; index += 1) {
+      const previous = samples[index - 1];
+      const current = samples[index];
+      const previousState = previous[key];
+      const currentState = current[key];
+      const gap = current.t - previous.t;
+      // Unknown states, browser downtime and recorder restart gaps do NOT
+      // establish when an output changed. Never invent a transition.
+      if ((previousState !== 0 && previousState !== 1) ||
+          (currentState !== 0 && currentState !== 1) ||
+          gap <= 0 || gap > MAX_CHART_GAP_MS ||
+          previousState === currentState) continue;
+      events.push({ index, t: current.t, state: currentState, label: currentState === 1 ? "ON" : "OFF" });
+    }
+    return events;
+  }
+
   function renderChart() {
     if (!els.historyChart || state.currentView !== "history") return;
     const canvas = els.historyChart;
@@ -1187,6 +1213,8 @@
     if (samples.length < 2) return;
 
     const definition = chartDefinition(state.historyMetric, samples);
+    const outputKey = outputHistoryKey(state.historyMetric);
+    const outputEvents = outputHistoryEvents(samples, outputKey);
     const values = definition.series.flatMap((series) => series.values.filter(validNumber));
     if (definition.thresholds) values.push(...definition.thresholds.map((item) => item.value).filter(validNumber));
     if (!values.length) {
@@ -1248,6 +1276,24 @@
     });
     ctx.restore();
 
+    // A light background marks confirmed active periods only. Do not bridge
+    // unavailable output states or history gaps created by restarts.
+    if (outputKey) {
+      ctx.save();
+      ctx.fillStyle = outputKey === "uv" ? "rgba(183,124,255,.10)" : "rgba(69,207,255,.09)";
+      for (let index = 1; index < samples.length; index += 1) {
+        const previous = samples[index - 1];
+        const current = samples[index];
+        const gap = current.t - previous.t;
+        if (gap <= 0 || gap > MAX_CHART_GAP_MS) continue;
+        if (previous[outputKey] !== 1 || current[outputKey] !== 1) continue;
+        const left = clamp(xFor(previous.t), plot.left, plot.right);
+        const right = clamp(xFor(current.t), plot.left, plot.right);
+        if (right > left) ctx.fillRect(left, plot.top, right - left, plot.bottom - plot.top);
+      }
+      ctx.restore();
+    }
+
     (definition.thresholds || []).forEach((threshold) => {
       const y = yFor(threshold.value);
       ctx.save();
@@ -1286,13 +1332,50 @@
       els.chartLegend.appendChild(item);
     });
 
+    if (outputKey) {
+      // Lines and compact labels are drawn after the temperature series so
+      // both ON and OFF transitions remain visible above the traces.
+      ctx.save();
+      ctx.lineWidth = 1.4;
+      ctx.font = "bold 10px Inter, system-ui, sans-serif";
+      outputEvents.forEach((event, index) => {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        const color = event.state === 1
+          ? (outputKey === "uv" ? "#cba0ff" : "#45d8ff")
+          : "#adb4bb";
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top + 14);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        const labelY = plot.top + 2 + (index % 2) * 16;
+        const labelX = clamp(x - 12, plot.left, plot.right - 27);
+        ctx.fillStyle = "rgba(8,10,12,.94)";
+        ctx.fillRect(labelX - 2, labelY - 1, 28, 15);
+        ctx.fillStyle = color;
+        ctx.fillText(event.label, labelX + 1, labelY + 10);
+      });
+      ctx.restore();
+
+      const item = document.createElement("span");
+      const name = outputKey === "uv" ? "UV LEDs" : "Peltier";
+      const color = outputKey === "uv" ? "#cba0ff" : "#45d8ff";
+      item.innerHTML = '<i style="background:' + color + '"></i>' +
+        name + " active shading · ON/OFF event lines";
+      els.chartLegend.appendChild(item);
+    }
+
     if (hasCalibrationWindow) {
       const item = document.createElement("span");
       item.innerHTML = '<i style="background:#ffb64a;opacity:.45"></i>SGP40 calibration';
       els.chartLegend.appendChild(item);
     }
 
-    canvas._chartMeta = { samples, plot, start, end, definition };
+    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents, outputKey };
   }
 
   function chartDefinition(metric, samples) {
@@ -1376,7 +1459,19 @@
     const revision = validNumber(nearest.sgp)
       ? '<span class="tooltip-state">SGP40 baseline <strong>REV ' + Math.round(nearest.sgp) + "</strong></span>"
       : "";
-    els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" + rows + "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
+    const outputKey = meta.outputKey;
+    const outputName = outputKey === "uv" ? "UV LEDs" : "Peltier";
+    const outputState = outputKey && (nearest[outputKey] === 0 || nearest[outputKey] === 1)
+      ? '<span class="tooltip-state">' + outputName + ' <strong>' +
+        (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
+      : outputKey ? '<span class="tooltip-state">' + outputName + ' <strong>UNKNOWN</strong></span>' : "";
+    const transition = outputKey && meta.outputEvents.some((item) => item.index === index)
+      ? '<span class="tooltip-state">Recorded transition <strong>' +
+        (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
+      : "";
+    els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" +
+      rows + outputState + transition +
+      "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
     els.chartTooltip.hidden = false;
     els.chartTooltip.style.left = clamp(x + 12, 8, rect.width - 190) + "px";
     els.chartTooltip.style.top = clamp(event.clientY - rect.top - 10, 8, rect.height - 150) + "px";
