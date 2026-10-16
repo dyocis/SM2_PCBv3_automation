@@ -64,6 +64,8 @@ If the printer already has a `[save_variables]` section, the command also persis
 
 The optional browser dashboard provides **Live**, **History**, **Media**, and **Controls** views for monitoring and managing the Nevermore StealthMax V2. Available controls and readings depend on the installed hardware and local configuration.
 
+The **History → UV LED** and **History → Peltier** temperature graphs show ON/OFF transition markers and lightly shaded periods when the corresponding output is commanded ON. Hover over the graph to inspect temperature, recorded output state, and detected transitions. These come from the existing `uv` / `pel` fields recorded every 10 seconds by the optional Pi recorder (or from browser history while open). Transition times indicate the **first sampled state change**, not a precisely measured electrical switching time. Missing samples and restart gaps never generate inferred events; the last 24 hours are retained.
+
 https://github.com/user-attachments/assets/c8f5814a-435c-4372-8eba-214bc37bcd2d
 
 ## Requirements
