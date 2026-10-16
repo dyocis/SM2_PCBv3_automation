@@ -1324,6 +1324,10 @@
     const definition = chartDefinition(state.historyMetric, samples);
     const outputKey = outputHistoryKey(state.historyMetric);
     const outputEvents = outputHistoryEvents(samples, outputKey);
+    const doorEvents = outputHistoryEvents(samples, "door").map((event) => ({
+      ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
+    }));
+    const manualEvents = state.annotations.filter((item) => item.t >= start && item.t <= end);
     // Keep the UV thermistor on the left °C scale and the outlet VOC Index
     // on a separate right scale. Mixing both into one range hides changes.
     const primarySeries = definition.series.filter((series) => series.axis !== "voc");
@@ -1496,13 +1500,60 @@
       els.chartLegend.appendChild(item);
     }
 
+    // Door switch samples and manually logged garage-door events are
+    // separate sources; neither implies a change in the other.
+    if (doorEvents.length || manualEvents.length) {
+      ctx.save();
+      ctx.lineWidth = 1.1;
+      ctx.font = "bold 9px Inter, system-ui, sans-serif";
+      for (const event of doorEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.strokeStyle = event.state === 1 ? "#ffb64a" : "#75d8b5";
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top + 1);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillText(event.state === 1 ? "DOOR OPEN" : "DOOR CLOSED",
+          clamp(x - 28, plot.left, plot.right - 72), plot.bottom - 9);
+      }
+      for (const event of manualEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.strokeStyle = "#d3b6fa";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top + 1);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#d3b6fa";
+        const shortLabel = event.kind === "garage-open" ? "GARAGE OPEN"
+          : event.kind === "garage-close" ? "GARAGE CLOSED" : "EVENT";
+        ctx.fillText(shortLabel, clamp(x - 30, plot.left, plot.right - 83), plot.top + 42);
+      }
+      ctx.restore();
+    }
+    if (samples.some((point) => point.door === 0 || point.door === 1)) {
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#ffb64a"></i>Chamber door events';
+      els.chartLegend.appendChild(item);
+    }
+    if (manualEvents.length) {
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#d3b6fa"></i>Manual events';
+      els.chartLegend.appendChild(item);
+    }
+
     if (hasCalibrationWindow) {
       const item = document.createElement("span");
       item.innerHTML = '<i style="background:#ffb64a;opacity:.45"></i>SGP40 calibration';
       els.chartLegend.appendChild(item);
     }
 
-    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents, outputKey, vocMax };
+    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents,
+      doorEvents, manualEvents, outputKey, vocMax };
   }
 
   function chartDefinition(metric, samples) {
@@ -1583,6 +1634,16 @@
       return "<span><i style=\"background:" + series.color + "\"></i>" + series.label + " <strong>" + formatChartValue(series.values[index], series.axis === "voc" ? "voc" : state.historyMetric) + "</strong></span>";
     }).join("");
     const vent = nearest.vent === 1 ? "OPEN" : nearest.vent === 0 ? "CLOSED" : "UNKNOWN";
+    const door = nearest.door === 1 ? "OPEN" : nearest.door === 0 ? "CLOSED" : "UNKNOWN";
+    const doorEvent = meta.doorEvents?.find((item) => item.index === index);
+    const doorChange = doorEvent
+      ? '<span class="tooltip-state">Chamber door transition <strong>' +
+        (doorEvent.state === 1 ? "OPEN" : "CLOSED") + "</strong></span>" : "";
+    const manualNear = (meta.manualEvents || []).filter((item) =>
+      Math.abs(item.t - targetTime) <= 20_000);
+    const manualRows = manualNear.map((item) =>
+      '<span class="tooltip-state">Manual event <strong>' +
+      escapeHtml(item.label) + "</strong></span>").join("");
     const calibration = nearest.cal === 1
       ? '<span class="tooltip-state">SGP40 calibration <strong>ACTIVE</strong></span>'
       : "";
@@ -1600,7 +1661,8 @@
         (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
       : "";
     els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" +
-      rows + outputState + transition +
+      rows + outputState + transition + doorChange + manualRows +
+      '<span class="tooltip-state">Chamber door <strong>' + door + '</strong></span>' +
       "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
     els.chartTooltip.hidden = false;
     els.chartTooltip.style.left = clamp(x + 12, 8, rect.width - 190) + "px";
@@ -2075,6 +2137,12 @@
     } catch {
       return endpoint;
     }
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[char]));
   }
 
   function truthy(value) {
