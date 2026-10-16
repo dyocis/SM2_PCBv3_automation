@@ -105,6 +105,11 @@ assert(app.includes("cleanHistorySeries"), "Existing-history cleanup is missing"
 assert(app.includes("MAX_CHART_GAP_MS"), "Restart gaps are not preserved in chart rendering");
 assert(app.includes("outputHistoryEvents"), "History charts do not detect UV/Peltier output state transitions");
 assert(app.includes("outputHistoryKey"), "History charts do not select the UV/Peltier state source");
+assert(app.includes('outputHistoryEvents(samples, "door")'), "Chamber-door event detection missing");
+assert(app.includes('key: "history_annotations"'), "History annotations are not stored through Moonraker");
+assert(recorder.includes('query_available_door'), "Optional chamber-door capability probe missing");
+assert(recorder.includes('"door": door_open'), "Chamber-door state missing from recorder samples");
+assert(html.includes('id="annotationForm"'), "Manual annotation dialog missing");
 assert(app.includes('label: "VOC outlet (index)"') && app.includes('axis: "voc"'),
   "UV history graph is missing outlet VOC with its separate scale");
 assert(app.includes("yForVoc"), "UV outlet VOC history is not drawn against an independent scale");
