@@ -35,7 +35,16 @@ The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, hel
 
 **During a print or ordinary automatic filtration, the exhaust vent is for chamber-temperature control, not VOC management.** The inlet BME280 chamber-temperature reading opens the vent when it reaches the active material profile's `chamber_target`; the existing `chamber_hysteresis` keeps it open until temperature reaches `chamber_target - chamber_hysteresis`. Even a **VOC EMERGENCY** continues fan/UV treatment without opening the vent when the chamber is below its temperature limit.
 
-**After a print**, `NEVERMORE_PRINT_END` deliberately opens the vent as part of the existing adaptive post-print purge. The purge is intended to help exhaust trapped chamber heat as well as residual fumes, and its current completion criteria are still VOC-based: it closes the vent when the inlet VOC index drops below the recovery band, **not** when the chamber reaches room temperature. Manual vent commands remain available, and Peltier thermal/airflow cooldown and emergency shutdown interlocks remain in effect.
+**After a print**, `NEVERMORE_PRINT_END` starts two independent operations: (1) chamber-temperature exhaust cooling, and (2) VOC-based **internal fan/UV filtration**. The exhaust opens only while the chamber is above a configured post-print temperature, and closes when that target is reached **or when a one-shot maximum runtime expires**, whichever comes first. High VOC can keep the filter fan and UV treatment running **but cannot reopen or extend the exhaust window**. Manual vent commands remain available; Peltier airflow/cooldown and emergency shutdown interlocks remain in effect.
+
+The defaults are **35°C** for the post-print vent target and **60 minutes** for the maximum vent runtime. To customize them, place the following in your preserved private `SM2_Local_Hardware.cfg`, inside `[gcode_macro SM2_SETTINGS]`:
+
+```ini
+variable_post_print_vent_target_temp: 35
+variable_post_print_vent_max_minutes: 60
+```
+
+The temperature target accepts 20–80°C; maximum runtime accepts 0–240 minutes, with `0` disabling automatic post-print vent cooling. Invalid settings fail closed. Existing private configurations that omit these settings safely use the defaults. During an **active print**, vent opening follows the material-specific `chamber_target` and its hysteresis, with no post-print time cap. `NEVERMORE_STATUS` reports the post-print vent window state and its configured limits.
 
 ## Dashboard demonstration
 
