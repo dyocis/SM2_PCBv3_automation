@@ -10,6 +10,14 @@ from pathlib import Path
 from test_peltier_thermal import JINJA, MACROS as CONTROL, make_printer
 
 
+def simulate_klipper_macro_error(message: str) -> None:
+    """Klipper's action_raise_error aborts G-code template evaluation."""
+    raise ValueError(message)
+
+
+JINJA.globals["action_raise_error"] = simulate_klipper_macro_error
+
+
 ROOT = Path(__file__).resolve().parents[1]
 AUTOMATION_SOURCE = (ROOT / "config/SM2_Automation.cfg").read_text(encoding="utf-8")
 HARDWARE_SOURCE = (ROOT / "config/SM2_Hardware_Control.cfg").read_text(encoding="utf-8")
@@ -252,11 +260,9 @@ class PeltierAutoTests(unittest.TestCase):
                                 ("35", "241"), ("none", "60"), ("35", "bad"),
                                 ("nan", "30"), ("35", "inf")):
             with self.subTest(target=target, minutes=minutes):
-                result = render("NEVERMORE_POST_PRINT_VENT_SETTINGS",
-                                build(), TARGET=target, MAX_MINUTES=minutes)
-                self.assertIn("Post-print vent settings rejected", result)
-                self.assertNotIn("SET_GCODE_VARIABLE MACRO=SM_LED_STATE VARIABLE=post_print_vent_target_temp", result)
-                self.assertNotIn("SAVE_VARIABLE", result)
+                with self.assertRaisesRegex(ValueError, "Post-print vent settings rejected"):
+                    render("NEVERMORE_POST_PRINT_VENT_SETTINGS",
+                           build(), TARGET=target, MAX_MINUTES=minutes)
         zero = render("NEVERMORE_POST_PRINT_VENT_SETTINGS", build(),
                       TARGET="35", MAX_MINUTES="0")
         self.assertIn("VALUE=0.0", zero)
