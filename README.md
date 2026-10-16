@@ -31,6 +31,12 @@ Buying the PCB and sensors directly from Isik's Tech is strongly recommended. Th
 
 The shared files do not depend on someone else's `PRINT_START`, `PRINT_END`, helper macros, directory names, MCU serial, or saved-variable file. Per-printer values live in one local file that is excluded by `.gitignore`.
 
+### Exhaust vent policy
+
+**During a print or ordinary automatic filtration, the exhaust vent is for chamber-temperature control, not VOC management.** The inlet BME280 chamber-temperature reading opens the vent when it reaches the active material profile's `chamber_target`; the existing `chamber_hysteresis` keeps it open until temperature reaches `chamber_target - chamber_hysteresis`. Even a **VOC EMERGENCY** continues fan/UV treatment without opening the vent when the chamber is below its temperature limit.
+
+**After a print**, `NEVERMORE_PRINT_END` deliberately opens the vent as part of the existing adaptive post-print purge. The purge is intended to help exhaust trapped chamber heat as well as residual fumes, and its current completion criteria are still VOC-based: it closes the vent when the inlet VOC index drops below the recovery band, **not** when the chamber reaches room temperature. Manual vent commands remain available, and Peltier thermal/airflow cooldown and emergency shutdown interlocks remain in effect.
+
 ## Dashboard demonstration
 
 The optional browser dashboard provides **Live**, **History**, **Media**, and **Controls** views for monitoring and managing the Nevermore StealthMax V2. Available controls and readings depend on the installed hardware and local configuration.
@@ -168,7 +174,7 @@ After a software update, use `FIRMWARE_RESTART` and `NEVERMORE_STATUS` to verify
 
 ### Optional temperature-driven Peltier automation (development)
 
-**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Chamber ventilation and VOC emergency exhaust take precedence: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
+**VOC level does not switch the Peltier on.** Print filtration, post-print purge and VOC categories continue to control fan/UV treatment independently. When opted in, the cooler uses the `BME_IN` *air temperature*, not the Peltier thermistor temperatures, to decide when cooling is useful. The Peltier thermistors remain **safety inputs**. Temperature-driven chamber ventilation takes precedence over the Peltier, and VOC emergency remains a separate cooler inhibit: opening the exhaust vent safely shuts down the Peltier, preserving its 60-second full-fan cooldown.
 
 The public installer leaves automatic Peltier cooling **off by default**. Users may opt in by setting the following inside the preserved, local `[gcode_macro SM2_SETTINGS]` section after establishing suitable module-specific thermal limits:
 
