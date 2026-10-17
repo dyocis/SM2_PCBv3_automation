@@ -1321,6 +1321,52 @@
     return events;
   }
 
+  function recordedDoorTransitions(samples) {
+    // Browser-generated telemetry has no door state. Ignore only those
+    // missing values; a missing value from the Pi recorder terminates the
+    // known-state sequence to avoid fabricating events during an outage.
+    const events = [];
+    let previous = null;
+    for (let index = 0; index < samples.length; index += 1) {
+      const current = samples[index];
+      if (current.door !== 0 && current.door !== 1) {
+        if (current.src !== "browser") previous = null;
+        continue;
+      }
+      const gap = previous ? current.t - previous.t : Infinity;
+      if (previous && gap > 0 && gap <= MAX_CHART_GAP_MS &&
+          previous.door !== current.door) {
+        events.push({ index, t: current.t, state: current.door });
+      }
+      previous = current;
+    }
+    return events;
+  }
+
+  function groupedDoorTransitions(events) {
+    // Coalesce a run of quick reopenings into its first OPEN and last CLOSED.
+    // Retain separate door-use sessions when the gap exceeds the window.
+    const result = [];
+    let cluster = [];
+    function flush() {
+      if (!cluster.length) return;
+      result.push(cluster[0]);
+      if (cluster.length > 1 &&
+          cluster[cluster.length - 1].state !== cluster[0].state) {
+        result.push(cluster[cluster.length - 1]);
+      }
+      cluster = [];
+    }
+    for (const event of events) {
+      const previous = cluster[cluster.length - 1];
+      if (previous && (event.t - previous.t > DOOR_EVENT_GROUP_MS ||
+          event.t - previous.t <= 0)) flush();
+      cluster.push(event);
+    }
+    flush();
+    return result;
+  }
+
   function renderChart() {
     if (!els.historyChart || state.currentView !== "history") return;
     const canvas = els.historyChart;
@@ -1344,9 +1390,15 @@
     const definition = chartDefinition(state.historyMetric, samples);
     const outputKey = outputHistoryKey(state.historyMetric);
     const outputEvents = outputHistoryEvents(samples, outputKey);
-    const doorEvents = outputHistoryEvents(samples, "door").map((event) => ({
-      ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
-    }));
+    const firstFastDoorEvent = state.doorEvents.length ? state.doorEvents[0].t : Infinity;
+    const sampledDoorEvents = groupedDoorTransitions(recordedDoorTransitions(samples))
+      .filter((event) => event.t < firstFastDoorEvent - DOOR_EVENT_GROUP_MS);
+    const fastDoorEvents = state.doorEvents.filter((event) => event.t >= start && event.t <= end);
+    const doorEvents = [...sampledDoorEvents, ...fastDoorEvents]
+      .sort((a, b) => a.t - b.t)
+      .map((event) => ({
+        ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
+      }));
     const manualEvents = state.annotations.filter((item) => item.t >= start && item.t <= end);
     // Keep the UV thermistor on the left °C scale and the outlet VOC Index
     // on a separate right scale. Mixing both into one range hides changes.
@@ -1655,7 +1707,8 @@
     }).join("");
     const vent = nearest.vent === 1 ? "OPEN" : nearest.vent === 0 ? "CLOSED" : "UNKNOWN";
     const door = nearest.door === 1 ? "OPEN" : nearest.door === 0 ? "CLOSED" : "UNKNOWN";
-    const doorEvent = meta.doorEvents?.find((item) => item.index === index);
+    const doorEvent = meta.doorEvents?.find((item) =>
+      Math.abs(item.t - targetTime) <= 8_000);
     const doorChange = doorEvent
       ? '<span class="tooltip-state">Chamber door transition <strong>' +
         (doorEvent.state === 1 ? "OPEN" : "CLOSED") + "</strong></span>" : "";
