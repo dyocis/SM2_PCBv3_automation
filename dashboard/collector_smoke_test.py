@@ -36,6 +36,7 @@ STATUS = {
     "temperature_sensor _SM_MCU": {"temperature": 43.2},
     "print_stats": {"state": "printing", "filename": "test.gcode"},
     "webhooks": {"state": "ready", "state_message": "Printer is ready"},
+    "gcode_button chamber_door": {"state": "PRESSED"},
 }
 
 
@@ -51,6 +52,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path.startswith("/server/info"):
             self.send_json({"result": {"klippy_state": "ready"}})
+            return
+        if self.path.startswith("/printer/objects/list"):
+            self.send_json({"result": {"objects": list(STATUS)}})
             return
         self.send_json({"result": {"value": {"installedAt": 1234567890}}})
 
@@ -108,13 +112,20 @@ def main() -> None:
             assert sample["pi"] == 1008.42
             assert sample["mode"] == "SGP40 CALIBRATION"
             assert sample["vent"] == 0
+            assert sample["door"] == 1
             assert sample["cal"] == 1
             assert sample["sgp"] == 3
             assert sample["pth"] == 71.2
             assert sample["ptc"] == 36.4
             assert sample["uvt"] == 42.7
             # Optional sensors do not disrupt VOC history if not installed.
-            from nevermore_history import make_sample
+            from nevermore_history import make_sample, query_available_door, query_status
+            endpoint = f"http://127.0.0.1:{server.server_port}"
+            assert query_available_door(endpoint)
+            assert query_status(endpoint, include_door=True)["gcode_button chamber_door"]["state"] == "PRESSED"
+            assert make_sample({**STATUS, "gcode_button chamber_door": {"state": "RELEASED"}}, 123)["door"] == 0
+            assert make_sample({**STATUS, "gcode_button chamber_door": {"state": "UNKNOWN"}}, 123)["door"] is None
+            assert make_sample({key: value for key, value in STATUS.items() if key != "gcode_button chamber_door"}, 123)["door"] is None
             absent = {
                 **STATUS,
                 "gcode_macro SM_LED_STATE": {
@@ -135,7 +146,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
 
-    print("Recorder smoke test verified optional Peltier telemetry, pressure, vent, SGP40 tags, and atomic output.")
+    print("Recorder smoke test verified optional chamber-door status, Peltier telemetry, SGP40 tags, and atomic output.")
 
 
 if __name__ == "__main__":

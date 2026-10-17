@@ -4,6 +4,7 @@
   const STORAGE_KEY = "nevermore-dashboard-endpoint";
   const HISTORY_KEY = "nevermore-dashboard-history-v2";
   const MEDIA_KEY = "nevermore-dashboard-media-v2";
+  const ANNOTATIONS_KEY = "nevermore-dashboard-history-annotations-v1";
   const DB_NAMESPACE = "nevermore_dashboard";
   const STALE_AFTER_MS = 20_000;
   const HISTORY_SAMPLE_MS = 10_000;
@@ -71,7 +72,8 @@
       "pressureIn", "pressureOut", "newMediaButton", "pressureCalibrateButton",
       "vocCalibrateButton", "calibrationNote", "recorderState", "historyChart",
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
-      "chartRange", "controlStatus", "controlLockButton", "controlFanVisual",
+      "chartRange", "annotationOpen", "annotationDialog", "annotationForm", "annotationKind",
+      "annotationTime", "annotationNote", "annotationList", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
       "autoControlState", "safetyState", "pcbTemp", "mcuTemp", "uvLedTemp", "uvThermalState", "peltierHotTemp", "peltierColdTemp", "peltierAutoState", "airflowState",
       "sgpCalibrationState", "sgpCalibrationTime", "sgpCalibrationButton", "helpTooltip",
@@ -90,6 +92,7 @@
     isDemo: false,
     demoTimer: null,
     history: [],
+    annotations: [],
     historyMetric: "voc",
     historyMinutes: 60,
     historySource: "browser",
@@ -696,6 +699,110 @@
     } catch {
       localStorage.removeItem(MEDIA_KEY);
     }
+
+    try {
+      state.annotations = sanitizeAnnotations(JSON.parse(localStorage.getItem(ANNOTATIONS_KEY) || "[]"));
+    } catch {
+      localStorage.removeItem(ANNOTATIONS_KEY);
+    }
+  }
+
+  function sanitizeAnnotations(items) {
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    if (!Array.isArray(items)) return [];
+    const validKinds = ["garage-open", "garage-close", "note"];
+    const entries = items.filter((item) =>
+      item && typeof item.id === "string" && item.id.length <= 80 &&
+      validKinds.includes(item.kind) && typeof item.label === "string" &&
+      item.label.length > 0 && item.label.length <= 80 &&
+      Number.isFinite(item.t) && item.t >= cutoff && item.t <= Date.now() + 60_000);
+    return [...new Map(entries.map((item) => [item.id, {
+      id: item.id, t: item.t, kind: item.kind, label: item.label,
+    }])).values()].sort((a, b) => a.t - b.t).slice(-100);
+  }
+
+  async function loadAnnotations() {
+    if (!client || state.isDemo) return;
+    try {
+      const result = await client.call("server.database.get_item", {
+        namespace: DB_NAMESPACE, key: "history_annotations",
+      });
+      state.annotations = sanitizeAnnotations(result?.value);
+      localStorage.setItem(ANNOTATIONS_KEY, JSON.stringify(state.annotations));
+    } catch {
+      // A fresh installation has no stored annotations yet. Keep browser
+      // history visible if Moonraker's optional database is unavailable.
+    }
+    renderAnnotationList();
+    renderChart();
+  }
+
+  async function saveAnnotations(items) {
+    if (!client || state.isDemo || state.connection !== "live") {
+      throw new Error("Connect to Moonraker before saving history annotations.");
+    }
+    const next = sanitizeAnnotations(items);
+    await client.call("server.database.post_item", {
+      namespace: DB_NAMESPACE, key: "history_annotations", value: next,
+    });
+    state.annotations = next;
+    localStorage.setItem(ANNOTATIONS_KEY, JSON.stringify(next));
+    renderAnnotationList();
+    renderChart();
+  }
+
+  function localDateTimeValue(date = new Date()) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+      .toISOString().slice(0, 16);
+  }
+
+  function annotationLabel(kind, note) {
+    return kind === "garage-open" ? "Garage door opened"
+      : kind === "garage-close" ? "Garage door closed"
+        : note.trim().slice(0, 80);
+  }
+
+  async function addAnnotation(event) {
+    event.preventDefault();
+    const kind = els.annotationKind.value;
+    const t = new Date(els.annotationTime.value).getTime();
+    const label = annotationLabel(kind, els.annotationNote.value);
+    if (!Number.isFinite(t) || t < Date.now() - HISTORY_RETENTION_MS ||
+        t > Date.now() + 60_000 || !label) {
+      showToast("Choose an event within the last 24 hours and enter a note if needed.");
+      return;
+    }
+    if (!["garage-open", "garage-close", "note"].includes(kind)) return;
+    const item = { id: String(Date.now()) + "-" + Math.random().toString(36).slice(2),
+      t, kind, label };
+    try {
+      await saveAnnotations([...state.annotations, item]);
+      els.annotationDialog.close();
+      showToast("History event saved in Moonraker.");
+    } catch (error) {
+      showToast("Event not saved: " + error.message);
+    }
+  }
+
+  function renderAnnotationList() {
+    if (!els.annotationList) return;
+    els.annotationList.replaceChildren();
+    const list = sanitizeAnnotations(state.annotations).slice(-6).reverse();
+    for (const item of list) {
+      const row = document.createElement("div");
+      row.className = "annotation-entry";
+      const label = document.createElement("span");
+      label.textContent = new Date(item.t).toLocaleTimeString([], {
+        hour: "numeric", minute: "2-digit",
+      }) + " · " + item.label;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.dataset.annotationRemove = item.id;
+      remove.setAttribute("aria-label", "Remove " + item.label);
+      row.append(label, remove);
+      els.annotationList.append(row);
+    }
   }
 
   async function initializeLiveFeatures() {
@@ -716,6 +823,7 @@
     }
 
     await loadCollectorHistory();
+    await loadAnnotations();
   }
 
   async function persistMedia(showResult = false) {
@@ -768,7 +876,7 @@
   function sanitizeHistoryPoint(point) {
     if (!point || !Number.isFinite(Number(point.t))) return null;
     const clean = { t: Number(point.t), mode: String(point.mode || "") };
-    ["vi", "vo", "ti", "to", "pth", "ptc", "uvt", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "cal", "sgp"].forEach((key) => {
+    ["vi", "vo", "ti", "to", "pth", "ptc", "uvt", "pi", "po", "hi", "ho", "fs", "rpm", "uv", "pel", "vent", "door", "cal", "sgp"].forEach((key) => {
       const raw = point[key];
       const value = Number(raw);
       clean[key] = raw !== null && raw !== "" && Number.isFinite(value) ? value : null;
@@ -793,6 +901,7 @@
     if (!validNumber(point.fs) || point.fs < 0 || point.fs > 1.05) return "fan command outside range";
     if (!validNumber(point.rpm) || point.rpm < 0 || point.rpm > 30_000) return "fan RPM outside range";
     if (validNumber(point.vent) && point.vent !== 0 && point.vent !== 1) return "vent state outside range";
+    if (validNumber(point.door) && point.door !== 0 && point.door !== 1) return "door state outside range";
     if (validNumber(point.cal) && point.cal !== 0 && point.cal !== 1) return "calibration state outside range";
     if (validNumber(point.sgp) && (point.sgp < 0 || point.sgp > 1_000_000)) return "SGP40 calibration revision outside range";
     return null;
@@ -1215,6 +1324,10 @@
     const definition = chartDefinition(state.historyMetric, samples);
     const outputKey = outputHistoryKey(state.historyMetric);
     const outputEvents = outputHistoryEvents(samples, outputKey);
+    const doorEvents = outputHistoryEvents(samples, "door").map((event) => ({
+      ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
+    }));
+    const manualEvents = state.annotations.filter((item) => item.t >= start && item.t <= end);
     // Keep the UV thermistor on the left °C scale and the outlet VOC Index
     // on a separate right scale. Mixing both into one range hides changes.
     const primarySeries = definition.series.filter((series) => series.axis !== "voc");
@@ -1387,13 +1500,60 @@
       els.chartLegend.appendChild(item);
     }
 
+    // Door switch samples and manually logged garage-door events are
+    // separate sources; neither implies a change in the other.
+    if (doorEvents.length || manualEvents.length) {
+      ctx.save();
+      ctx.lineWidth = 1.1;
+      ctx.font = "bold 9px Inter, system-ui, sans-serif";
+      for (const event of doorEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.strokeStyle = event.state === 1 ? "#ffb64a" : "#75d8b5";
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top + 1);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillText(event.state === 1 ? "DOOR OPEN" : "DOOR CLOSED",
+          clamp(x - 28, plot.left, plot.right - 72), plot.bottom - 9);
+      }
+      for (const event of manualEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.strokeStyle = "#d3b6fa";
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top + 1);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#d3b6fa";
+        const shortLabel = event.kind === "garage-open" ? "GARAGE OPEN"
+          : event.kind === "garage-close" ? "GARAGE CLOSED" : "EVENT";
+        ctx.fillText(shortLabel, clamp(x - 30, plot.left, plot.right - 83), plot.top + 42);
+      }
+      ctx.restore();
+    }
+    if (samples.some((point) => point.door === 0 || point.door === 1)) {
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#ffb64a"></i>Chamber door events';
+      els.chartLegend.appendChild(item);
+    }
+    if (manualEvents.length) {
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#d3b6fa"></i>Manual events';
+      els.chartLegend.appendChild(item);
+    }
+
     if (hasCalibrationWindow) {
       const item = document.createElement("span");
       item.innerHTML = '<i style="background:#ffb64a;opacity:.45"></i>SGP40 calibration';
       els.chartLegend.appendChild(item);
     }
 
-    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents, outputKey, vocMax };
+    canvas._chartMeta = { samples, plot, start, end, definition, outputEvents,
+      doorEvents, manualEvents, outputKey, vocMax };
   }
 
   function chartDefinition(metric, samples) {
@@ -1474,6 +1634,16 @@
       return "<span><i style=\"background:" + series.color + "\"></i>" + series.label + " <strong>" + formatChartValue(series.values[index], series.axis === "voc" ? "voc" : state.historyMetric) + "</strong></span>";
     }).join("");
     const vent = nearest.vent === 1 ? "OPEN" : nearest.vent === 0 ? "CLOSED" : "UNKNOWN";
+    const door = nearest.door === 1 ? "OPEN" : nearest.door === 0 ? "CLOSED" : "UNKNOWN";
+    const doorEvent = meta.doorEvents?.find((item) => item.index === index);
+    const doorChange = doorEvent
+      ? '<span class="tooltip-state">Chamber door transition <strong>' +
+        (doorEvent.state === 1 ? "OPEN" : "CLOSED") + "</strong></span>" : "";
+    const manualNear = (meta.manualEvents || []).filter((item) =>
+      Math.abs(item.t - targetTime) <= 20_000);
+    const manualRows = manualNear.map((item) =>
+      '<span class="tooltip-state">Manual event <strong>' +
+      escapeHtml(item.label) + "</strong></span>").join("");
     const calibration = nearest.cal === 1
       ? '<span class="tooltip-state">SGP40 calibration <strong>ACTIVE</strong></span>'
       : "";
@@ -1491,7 +1661,8 @@
         (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
       : "";
     els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" +
-      rows + outputState + transition +
+      rows + outputState + transition + doorChange + manualRows +
+      '<span class="tooltip-state">Chamber door <strong>' + door + '</strong></span>' +
       "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
     els.chartTooltip.hidden = false;
     els.chartTooltip.style.left = clamp(x + 12, 8, rect.width - 190) + "px";
@@ -1968,6 +2139,12 @@
     }
   }
 
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[char]));
+  }
+
   function truthy(value) {
     return value === true || value === 1 || value === "1" || value === "true";
   }
@@ -2084,6 +2261,43 @@
     if (target) hideHelp(target);
   });
 
+  els.annotationOpen.addEventListener("click", () => {
+    if (state.isDemo || state.connection !== "live") {
+      showToast("Connect to the live printer to save a history event.");
+      return;
+    }
+    els.annotationTime.value = localDateTimeValue();
+    els.annotationKind.value = "garage-open";
+    els.annotationNote.value = "";
+    els.annotationNote.disabled = true;
+    els.annotationDialog.showModal();
+  });
+  els.annotationKind.addEventListener("change", () => {
+    els.annotationNote.disabled = els.annotationKind.value !== "note";
+  });
+  els.annotationForm.addEventListener("submit", addAnnotation);
+  $("annotationCancel").addEventListener("click", () => els.annotationDialog.close());
+  $("annotationClose").addEventListener("click", () => els.annotationDialog.close());
+  document.querySelector(".annotation-list").addEventListener("click", async (event) => {
+    const remove = event.target.closest("[data-annotation-remove]");
+    if (!remove) return;
+    const item = state.annotations.find((entry) => entry.id === remove.dataset.annotationRemove);
+    if (!item) return;
+    const confirmed = await askConfirmation({
+      eyebrow: "HISTORY ANNOTATION",
+      title: "Remove this event?",
+      message: item.label + " · " + new Date(item.t).toLocaleString(),
+      accept: "Remove event",
+    });
+    if (!confirmed) return;
+    try {
+      await saveAnnotations(state.annotations.filter((entry) => entry.id !== item.id));
+      showToast("History event removed.");
+    } catch (error) {
+      showToast("Event not removed: " + error.message);
+    }
+  });
+
   els.postPrintVentForm.addEventListener("submit", savePostPrintVentSettings);
   [els.postPrintVentTarget, els.postPrintVentMinutes].forEach((input) => {
     input.addEventListener("input", () => {
@@ -2131,6 +2345,7 @@
   setInterval(loadCollectorHistory, 60_000);
   setInterval(renderChart, 30_000);
   loadLocalFeatureState();
+  renderAnnotationList();
   setCurrentView("live");
   render();
 

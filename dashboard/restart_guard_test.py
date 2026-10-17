@@ -41,6 +41,10 @@ def at(timestamp_ms: int, **changes: float | None) -> dict:
 
 def main() -> None:
     assert sample_plausibility_error(VALID_SAMPLE) is None
+    assert sample_plausibility_error(at(1_000, door=1)) is None
+    assert sample_plausibility_error(at(1_000, door=0)) is None
+    assert sample_plausibility_error(at(1_000, door=None)) is None
+    assert "door" in (sample_plausibility_error(at(1_000, door=2)) or "")
 
     missing_temperature = at(2_000, ti=None)
     assert "temperature" in (sample_plausibility_error(missing_temperature) or "")

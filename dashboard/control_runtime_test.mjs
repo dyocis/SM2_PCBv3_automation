@@ -7,6 +7,7 @@ const [html, app] = await Promise.all([
 ]);
 
 const scripts = [];
+const annotationWrites = [];
 const status = {
   "gcode_macro SM_LED_STATE": {
     auto_reason: "IDLE", current_state: "IDLE", auto_mode: 1, manual_override: 0,
@@ -61,7 +62,10 @@ class FakeWebSocket {
     } else if (request.method === "printer.gcode.script") {
       scripts.push(request.params.script);
       response = "ok";
-    } else if (request.method === "server.database.post_item") response = request.params;
+    } else if (request.method === "server.database.post_item") {
+      if (request.params.key === "history_annotations") annotationWrites.push(request.params.value);
+      response = request.params;
+    }
     else throw new Error("Unexpected RPC method: " + request.method);
     this.emit("message", { data: JSON.stringify({ jsonrpc: "2.0", id: request.id, result: response }) });
   }
@@ -97,6 +101,28 @@ const acceptDialog = async () => {
 };
 
 assert(byId("connectionText").textContent === "Live", "Fake Moonraker did not reach Live state");
+
+// History annotations use Moonraker's database, never G-code or direct pins.
+byId("annotationOpen").click();
+assert(byId("annotationDialog").open, "Annotation dialog did not open");
+assert(byId("annotationTime").value, "Event form did not prefill a local timestamp");
+byId("annotationKind").value = "garage-open";
+byId("annotationTime").value = byId("annotationTime").value;
+byId("annotationForm").dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+await new Promise((resolve) => setTimeout(resolve, 25));
+assert(annotationWrites.length === 1 && annotationWrites[0][0].label === "Garage door opened",
+  "Manual event was not written to Moonraker database");
+assert(byId("annotationList").textContent.includes("Garage door opened"),
+  "New annotation was not rendered");
+const scriptsBeforeAnnotationRemove = scripts.length;
+byId("annotationList").querySelector("[data-annotation-remove]").click();
+await acceptDialog();
+assert(annotationWrites.length === 2 && annotationWrites[1].length === 0,
+  "Removing an annotation did not update Moonraker database");
+assert(scripts.length === scriptsBeforeAnnotationRemove,
+  "Event annotations unexpectedly issued G-code");
+
+assert(byId("peltierAutoState").textContent === "DISABLED", "Peltier automatic state was not rendered");
 assert(byId("peltierAutoState").textContent === "DISABLED", "Peltier automatic state was not rendered");
 assert(byId("uvLedTemp").textContent === "N/A", "Absent optional UV sensor must display N/A");
 assert(byId("uvThermalReadout").textContent.includes("N/A"), "UV live component must display absent sensor");

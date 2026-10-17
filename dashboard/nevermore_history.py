@@ -61,10 +61,20 @@ def request_json(url: str, payload: dict[str, Any] | None = None) -> dict[str, A
         return json.load(response)
 
 
-def query_status(endpoint: str) -> dict[str, Any]:
+def query_available_door(endpoint: str) -> bool:
+    """Only request the optional door object if this printer exposes it."""
+    payload = request_json(endpoint.rstrip("/") + "/printer/objects/list")
+    objects = payload.get("result", {}).get("objects", [])
+    return isinstance(objects, list) and "gcode_button chamber_door" in objects
+
+
+def query_status(endpoint: str, include_door: bool = False) -> dict[str, Any]:
+    objects = dict(OBJECTS)
+    if include_door:
+        objects["gcode_button chamber_door"] = ["state"]
     payload = request_json(
         endpoint.rstrip("/") + "/printer/objects/query",
-        {"objects": OBJECTS},
+        {"objects": objects},
     )
     return payload.get("result", {}).get("status", {})
 
@@ -116,6 +126,8 @@ def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
     sgp_out = status.get("temperature_sensor SGP_OUT", {})
     pcb = status.get("temperature_sensor _SM_PCB", {})
     mcu = status.get("temperature_sensor _SM_MCU", {})
+    door = status.get("gcode_button chamber_door", {}).get("state")
+    door_open = 1 if door == "PRESSED" else 0 if door == "RELEASED" else None
 
     return {
         "t": timestamp_ms,
@@ -138,6 +150,9 @@ def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
         "uv": truthy(sm.get("uv")),
         "pel": truthy(sm.get("peltier")),
         "vent": truthy(sm.get("vent_open")),
+        # Optional chamber door: PRESSED = open, RELEASED = closed.
+        # Absent switches remain unknown rather than inventing closed states.
+        "door": door_open,
         "cal": truthy(sm.get("sgp40_calibration_active")),
         "sgp": number(sm.get("sgp40_calibration_revision")) or 0.0,
         "pcb": number(pcb.get("temperature")),
@@ -190,6 +205,10 @@ def sample_plausibility_error(sample: dict[str, Any]) -> str | None:
     vent = number(sample.get("vent"))
     if vent is not None and vent not in (0.0, 1.0):
         return "vent state is outside the expected range"
+
+    door = sample.get("door")
+    if door is not None and door not in (0, 1):
+        return "door state outside range"
 
     calibration = number(sample.get("cal"))
     if calibration is not None and calibration not in (0.0, 1.0):
@@ -426,6 +445,8 @@ def main() -> int:
     next_sample_time = time.monotonic()
     next_media_check = 0.0
     last_guard_reason = ""
+    door_available: bool | None = None
+    next_door_probe = 0.0
 
     # Persist the cleaned history immediately so an old restart spike cannot
     # keep distorting the charts while the new post-restart quarantine runs.
@@ -455,13 +476,20 @@ def main() -> int:
             server_info = query_server_info(args.moonraker)
             klippy_state = str(server_info.get("klippy_state", "unknown")).lower()
             if klippy_state != "ready":
+                door_available = None
                 guard.mark_unready("Klipper is " + klippy_state)
                 if guard.reason != last_guard_reason:
                     print("Nevermore recorder guard: " + guard.reason, flush=True)
                     last_guard_reason = guard.reason
                 continue
 
-            status = query_status(args.moonraker)
+            if door_available is None and now_monotonic >= next_door_probe:
+                try:
+                    door_available = query_available_door(args.moonraker)
+                except Exception:
+                    # Older Moonraker instances remain fully supported.
+                    next_door_probe = now_monotonic + 60.0
+            status = query_status(args.moonraker, include_door=door_available is True)
             webhook_state = str(status.get("webhooks", {}).get("state", "ready")).lower()
             if webhook_state != "ready":
                 guard.mark_unready("Printer webhooks state is " + webhook_state)
@@ -473,6 +501,8 @@ def main() -> int:
             timestamp_ms = int(time.time() * 1000)
             sample = make_sample(status, timestamp_ms)
         except Exception as error:  # keep the recorder alive across Moonraker restarts
+            door_available = None
+            next_door_probe = now_monotonic + 10.0
             guard.mark_unready("Moonraker/Klipper query unavailable")
             print("Nevermore recorder query failed: " + str(error), file=sys.stderr, flush=True)
             continue

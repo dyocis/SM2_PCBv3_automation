@@ -272,6 +272,14 @@
           </div>
 
           <div class="chart-legend" id="chartLegend" aria-label="Chart legend"></div>
+          <div class="annotation-toolbar">
+            <div>
+              <strong>History events</strong>
+              <small>Chamber-door events are detected automatically when the switch is installed. Add garage-door events and notes manually.</small>
+            </div>
+            <button class="secondary-button" id="annotationOpen" type="button">Add event</button>
+          </div>
+          <div id="annotationList" class="annotation-list" aria-live="polite"></div>
           <p class="history-note" id="historyNote">
             Install the optional Pi recorder for history that continues while this page is closed.
           </p>
@@ -518,6 +526,33 @@
         <div class="dialog-actions">
           <button class="secondary-button" id="demoButton" type="button">Run demo</button>
           <button class="primary-button" value="connect" type="submit">Connect</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="settings-dialog" id="annotationDialog">
+      <form id="annotationForm">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">HISTORY ANNOTATION</span>
+            <h2>Add event</h2>
+          </div>
+          <button class="close-button" id="annotationClose" type="button" aria-label="Close event dialog">×</button>
+        </div>
+        <p>Choose when an event occurred. It will appear on every history graph for the last 24 hours and be saved in Moonraker.</p>
+        <label for="annotationKind">Event</label>
+        <select id="annotationKind" required>
+          <option value="garage-open">Garage door opened</option>
+          <option value="garage-close">Garage door closed</option>
+          <option value="note">Other note</option>
+        </select>
+        <label for="annotationTime">When it happened (browser-local time)</label>
+        <input id="annotationTime" type="datetime-local" required>
+        <label for="annotationNote">Note (only for Other note)</label>
+        <input id="annotationNote" type="text" maxlength="80" placeholder="Brief event description" disabled>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="annotationCancel" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Save event</button>
         </div>
       </form>
     </dialog>
