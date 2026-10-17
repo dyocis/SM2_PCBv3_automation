@@ -41,6 +41,9 @@ OBJECTS = {
 STOP_REQUESTED = False
 DEFAULT_RESTART_QUARANTINE_SECONDS = 90.0
 DEFAULT_STABLE_SAMPLES = 3
+DOOR_POLL_SECONDS = 0.5
+DOOR_SETTLE_SECONDS = 0.75
+DOOR_REOPEN_MERGE_SECONDS = 12.0
 OUTLET_VOC_STEP_LIMIT = 120.0
 OUTLET_VOC_INVERSION_LIMIT = 80.0
 
@@ -66,6 +69,16 @@ def query_available_door(endpoint: str) -> bool:
     payload = request_json(endpoint.rstrip("/") + "/printer/objects/list")
     objects = payload.get("result", {}).get("objects", [])
     return isinstance(objects, list) and "gcode_button chamber_door" in objects
+
+
+def query_door_state(endpoint: str) -> int | None:
+    """Read the optional chamber switch independently of 10-second VOC samples."""
+    payload = request_json(
+        endpoint.rstrip("/") + "/printer/objects/query",
+        {"objects": {"gcode_button chamber_door": ["state"]}},
+    )
+    raw = payload.get("result", {}).get("status", {}).get("gcode_button chamber_door", {}).get("state")
+    return 1 if raw == "PRESSED" else 0 if raw == "RELEASED" else None
 
 
 def query_status(endpoint: str, include_door: bool = False) -> dict[str, Any]:
@@ -369,6 +382,70 @@ class RestartGuard:
         }
 
 
+@dataclass
+class DoorEventTracker:
+    """Debounce switch readings and group brief close/reopen bursts."""
+
+    settle_seconds: float = DOOR_SETTLE_SECONDS
+    reopen_merge_seconds: float = DOOR_REOPEN_MERGE_SECONDS
+    settled_state: int | None = None
+    pending_state: int | None = None
+    pending_since: float | None = None
+
+    def reset(self) -> None:
+        self.settled_state = None
+        self.pending_state = None
+        self.pending_since = None
+
+    def observe(
+        self, raw_state: int | None, now_monotonic: float,
+        timestamp_ms: int, events: list[dict[str, Any]],
+    ) -> bool:
+        """Return true if the event list changed."""
+        if raw_state not in (0, 1):
+            self.reset()
+            return False
+
+        if raw_state == self.settled_state:
+            self.pending_state = None
+            self.pending_since = None
+            return False
+
+        if raw_state != self.pending_state:
+            self.pending_state = raw_state
+            self.pending_since = now_monotonic
+            return False
+
+        if self.pending_since is None or now_monotonic - self.pending_since < self.settle_seconds:
+            return False
+
+        previous = self.settled_state
+        self.settled_state = raw_state
+        self.pending_state = None
+        self.pending_since = None
+        if previous is None:
+            # The first stable observation after startup is a baseline,
+            # not evidence of when a door was opened or closed.
+            return False
+
+        if raw_state == 1:
+            # Brief close/reopen: preserve original opening and postpone the
+            # closing marker until the door finally settles closed.
+            if (len(events) >= 2 and events[-2].get("state") == 1 and
+                events[-1].get("state") == 0 and
+                0 <= timestamp_ms - events[-1]["t"] <= self.reopen_merge_seconds * 1000):
+                events.pop()
+                return True
+            events.append({"t": timestamp_ms, "state": 1})
+            return True
+
+        # Only add CLOSED when the event log has an unmatched OPEN.
+        if events and events[-1].get("state") == 1:
+            events.append({"t": timestamp_ms, "state": 0})
+            return True
+        return False
+
+
 def load_json(path: Path, default: Any) -> Any:
     try:
         with path.open("r", encoding="utf-8") as handle:
@@ -398,6 +475,7 @@ def history_payload(
     lifetime: dict[str, Any],
     samples: list[dict[str, Any]],
     guard: RestartGuard,
+    door_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": 2,
@@ -407,6 +485,7 @@ def history_payload(
         "lifetime": lifetime,
         "guard": guard.metadata(),
         "samples": samples,
+        "door_events": door_events if door_events is not None else [],
     }
 
 
@@ -432,6 +511,19 @@ def main() -> int:
     previous = load_json(args.output, {})
     raw_samples = previous.get("samples", []) if isinstance(previous, dict) else []
     samples, removed_samples = clean_existing_history(raw_samples, args.restart_quarantine_seconds)
+    cutoff_at_start = int(time.time() * 1000) - int(args.retention_hours * 3_600_000)
+    raw_door_events = previous.get("door_events", []) if isinstance(previous, dict) else []
+    door_events = sorted(
+        (
+            {"t": int(event["t"]), "state": event["state"]}
+            for event in raw_door_events if isinstance(event, dict)
+            and isinstance(event.get("t"), (int, float))
+            and event.get("state") in (0, 1)
+            and cutoff_at_start <= event["t"] <= int(time.time() * 1000)
+        ),
+        key=lambda event: event["t"],
+    ) if isinstance(raw_door_events, list) else []
+    door_tracker = DoorEventTracker()
     lifetime = load_json(
         state_path,
         {"installed_at": None, "fan_seconds": 0.0, "voc_exposure_index_seconds": 0.0},
@@ -443,6 +535,7 @@ def main() -> int:
     last_sample_time = time.monotonic()
     last_write_time = 0.0
     next_sample_time = time.monotonic()
+    next_door_poll_time = time.monotonic()
     next_media_check = 0.0
     last_guard_reason = ""
     door_available: bool | None = None
@@ -452,7 +545,7 @@ def main() -> int:
     # keep distorting the charts while the new post-restart quarantine runs.
     startup_timestamp_ms = int(time.time() * 1000)
     try:
-        atomic_json_write(args.output, history_payload(startup_timestamp_ms, args, lifetime, samples, guard))
+        atomic_json_write(args.output, history_payload(startup_timestamp_ms, args, lifetime, samples, guard, door_events))
         atomic_json_write(state_path, lifetime)
         if removed_samples:
             print(
@@ -464,8 +557,32 @@ def main() -> int:
 
     while not STOP_REQUESTED:
         now_monotonic = time.monotonic()
+        # Check the switch more frequently than the 10-second environmental
+        # history interval. This observer never issues G-code or changes pins.
+        if door_available is True and now_monotonic >= next_door_poll_time:
+            next_door_poll_time = now_monotonic + DOOR_POLL_SECONDS
+            try:
+                raw_door = query_door_state(args.moonraker)
+                event_time_ms = int(time.time() * 1000)
+                changed = door_tracker.observe(raw_door, now_monotonic, event_time_ms, door_events)
+                if changed:
+                    cutoff = event_time_ms - int(args.retention_hours * 3_600_000)
+                    door_events = [event for event in door_events if event["t"] >= cutoff]
+                    # Persist accepted events immediately, even during VOC
+                    # startup quarantine or before the 60s sample write.
+                    try:
+                        atomic_json_write(
+                            args.output,
+                            history_payload(event_time_ms, args, lifetime, samples, guard, door_events),
+                        )
+                    except Exception as error:
+                        print("Nevermore door event save failed: " + str(error), file=sys.stderr, flush=True)
+            except Exception:
+                door_tracker.reset()
+
         if now_monotonic < next_sample_time:
-            time.sleep(min(0.5, next_sample_time - now_monotonic))
+            until_door = (next_door_poll_time - now_monotonic) if door_available is True else 0.5
+            time.sleep(max(0.01, min(0.25, next_sample_time - now_monotonic, until_door)))
             continue
 
         next_sample_time = now_monotonic + max(0.25, args.sample_seconds)
@@ -477,6 +594,7 @@ def main() -> int:
             klippy_state = str(server_info.get("klippy_state", "unknown")).lower()
             if klippy_state != "ready":
                 door_available = None
+                door_tracker.reset()
                 guard.mark_unready("Klipper is " + klippy_state)
                 if guard.reason != last_guard_reason:
                     print("Nevermore recorder guard: " + guard.reason, flush=True)
@@ -502,6 +620,7 @@ def main() -> int:
             sample = make_sample(status, timestamp_ms)
         except Exception as error:  # keep the recorder alive across Moonraker restarts
             door_available = None
+            door_tracker.reset()
             next_door_probe = now_monotonic + 10.0
             guard.mark_unready("Moonraker/Klipper query unavailable")
             print("Nevermore recorder query failed: " + str(error), file=sys.stderr, flush=True)
@@ -541,10 +660,11 @@ def main() -> int:
         samples.append(sample)
         cutoff = timestamp_ms - int(args.retention_hours * 3_600_000)
         samples = [point for point in samples if number(point.get("t")) and point["t"] >= cutoff]
+        door_events = [event for event in door_events if event["t"] >= cutoff]
 
         if now_monotonic - last_write_time >= max(args.sample_seconds, args.write_seconds):
             last_write_time = now_monotonic
-            payload = history_payload(timestamp_ms, args, lifetime, samples, guard)
+            payload = history_payload(timestamp_ms, args, lifetime, samples, guard, door_events)
             try:
                 atomic_json_write(args.output, payload)
                 atomic_json_write(state_path, lifetime)

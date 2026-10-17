@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 > Planned next version: **v0.3.0** (not tagged or published yet). The Peltier auto-cooling and thermistor thermal-limit features remain **disabled by default**.
 
+### Fixed
+
+- Door history no longer loses OPEN/CLOSED markers when browser snapshots without door telemetry interleave with Pi recorder samples.
+- Record and immediately persist chamber-door events independently at 0.5-second intervals with a 0.75-second settle check and 12-second close/reopen grouping; preserve 24-hour events through recorder restarts, while leaving 10-second VOC sampling and printer door macros unchanged.
+
 ### Added
 
 - Compact tabbed dashboard with Live, History, Media, and guarded Controls views.
