@@ -563,7 +563,20 @@ def main() -> int:
             next_door_poll_time = now_monotonic + DOOR_POLL_SECONDS
             try:
                 raw_door = query_door_state(args.moonraker)
-                door_tracker.observe(raw_door, now_monotonic, int(time.time() * 1000), door_events)
+                event_time_ms = int(time.time() * 1000)
+                changed = door_tracker.observe(raw_door, now_monotonic, event_time_ms, door_events)
+                if changed:
+                    cutoff = event_time_ms - int(args.retention_hours * 3_600_000)
+                    door_events = [event for event in door_events if event["t"] >= cutoff]
+                    # Persist accepted events immediately, even during VOC
+                    # startup quarantine or before the 60s sample write.
+                    try:
+                        atomic_json_write(
+                            args.output,
+                            history_payload(event_time_ms, args, lifetime, samples, guard, door_events),
+                        )
+                    except Exception as error:
+                        print("Nevermore door event save failed: " + str(error), file=sys.stderr, flush=True)
             except Exception:
                 door_tracker.reset()
 
