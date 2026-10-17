@@ -13,6 +13,7 @@
   const RESTART_QUARANTINE_MS = 90_000;
   const HISTORY_STABLE_SAMPLES = 3;
   const MAX_CHART_GAP_MS = 35_000;
+  const DOOR_EVENT_GROUP_MS = 12_000;
   const OUTLET_VOC_STEP_LIMIT = 120;
   const OUTLET_VOC_INVERSION_LIMIT = 80;
   const CONTROL_UNLOCK_MS = 5 * 60 * 1_000;
@@ -92,6 +93,7 @@
     isDemo: false,
     demoTimer: null,
     history: [],
+    doorEvents: [],
     annotations: [],
     historyMetric: "voc",
     historyMinutes: 60,
@@ -853,6 +855,9 @@
       const payload = await response.json();
       if (!Array.isArray(payload.samples)) throw new Error("Recorder data invalid");
       mergeHistory(payload.samples, "pi");
+      // Door events are authoritative read-only recorder observations.
+      // Unlike the 10-second VOC samples, they survive brief door activity.
+      state.doorEvents = sanitizeDoorEvents(payload.door_events);
       state.collectorLifetime = payload.lifetime || null;
       state.recorderGuard = payload.guard || null;
       state.historySource = "pi";
@@ -865,12 +870,27 @@
   function mergeHistory(samples, source) {
     const cutoff = Date.now() - HISTORY_RETENTION_MS;
     const combined = new Map();
-    [...state.history, ...samples].forEach((point) => {
+    // Preserve the origin of each reading: browser snapshots do not sample
+    // the chamber switch. A browser NULL must not break Pi door transitions.
+    for (const point of [...state.history, ...samples]) {
       const normalized = sanitizeHistoryPoint(point);
-      if (normalized && normalized.t >= cutoff) combined.set(normalized.t, normalized);
-    });
+      if (!normalized || normalized.t < cutoff) continue;
+      normalized.src = point.src === "pi" || point.src === "browser"
+        ? point.src : source;
+      combined.set(normalized.t, normalized);
+    }
     state.history = cleanHistorySeries([...combined.values()]);
     if (source === "pi") state.historySource = "pi";
+  }
+
+  function sanitizeDoorEvents(events) {
+    if (!Array.isArray(events)) return [];
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    return events.filter((event) =>
+      event && (event.state === 0 || event.state === 1) &&
+      Number.isFinite(event.t) && event.t >= cutoff && event.t <= Date.now() + 60_000)
+      .map((event) => ({ t: event.t, state: event.state }))
+      .sort((a, b) => a.t - b.t);
   }
 
   function sanitizeHistoryPoint(point) {
