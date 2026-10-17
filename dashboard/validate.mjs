@@ -113,6 +113,7 @@ assert(recorder.includes('query_available_door'), "Optional chamber-door capabil
 assert(recorder.includes("class DoorEventTracker"), "Door bounce/short-access grouping is missing");
 assert(recorder.includes("DOOR_POLL_SECONDS"), "Door observation does not use its own fast polling interval");
 assert(recorder.includes('"door_events": door_events'), "Persistent door events are not included in recorder output");
+assert(recorder.includes("Nevermore door event save failed:"), "Door events lack immediate write/error handling");
 assert(recorder.includes('"door": door_open'), "Chamber-door state missing from recorder samples");
 assert(html.includes('id="annotationForm"'), "Manual annotation dialog missing");
 assert(app.includes('label: "VOC outlet (index)"') && app.includes('axis: "voc"'),
