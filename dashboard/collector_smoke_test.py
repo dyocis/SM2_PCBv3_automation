@@ -36,7 +36,7 @@ STATUS = {
     "temperature_sensor _SM_MCU": {"temperature": 43.2},
     "print_stats": {"state": "printing", "filename": "test.gcode"},
     "webhooks": {"state": "ready", "state_message": "Printer is ready"},
-    "gcode_button chamber_door": {"state": "PRESSED"},
+    "gcode_button chamber_door": {"state": "RELEASED"},
 }
 
 
@@ -102,6 +102,25 @@ def main() -> None:
                         raise AssertionError(f"Recorder exited early: {process.returncode}")
                     time.sleep(0.1)
                 assert payload is not None, "Recorder wrote no samples within 5 seconds"
+
+                # Exercise real recorder polling, not only tracker unit tests.
+                # First let the door establish a stable CLOSED baseline.
+                time.sleep(1.3)
+                STATUS["gcode_button chamber_door"]["state"] = "PRESSED"
+                time.sleep(1.7)  # enough for a 0.75s stable OPEN observation
+                STATUS["gcode_button chamber_door"]["state"] = "RELEASED"
+                captured = None
+                deadline = time.monotonic() + 4
+                while time.monotonic() < deadline:
+                    candidate = json.loads(output.read_text())
+                    if len(candidate.get("door_events", [])) >= 2:
+                        captured = candidate["door_events"]
+                        break
+                    if process.poll() is not None:
+                        raise AssertionError(f"Recorder exited before door events: {process.returncode}")
+                    time.sleep(0.1)
+                assert captured is not None, "Recorder missed stable short door OPEN/CLOSED events"
+                assert [event["state"] for event in captured] == [1, 0], captured
             finally:
                 process.terminate()
                 process.wait(timeout=5)
@@ -113,7 +132,7 @@ def main() -> None:
             assert sample["pi"] == 1008.42
             assert sample["mode"] == "SGP40 CALIBRATION"
             assert sample["vent"] == 0
-            assert sample["door"] == 1
+            assert sample["door"] == 0
             assert sample["cal"] == 1
             assert sample["sgp"] == 3
             assert sample["pth"] == 71.2
@@ -123,7 +142,7 @@ def main() -> None:
             from nevermore_history import make_sample, query_available_door, query_status
             endpoint = f"http://127.0.0.1:{server.server_port}"
             assert query_available_door(endpoint)
-            assert query_status(endpoint, include_door=True)["gcode_button chamber_door"]["state"] == "PRESSED"
+            assert query_status(endpoint, include_door=True)["gcode_button chamber_door"]["state"] == "RELEASED"
             assert make_sample({**STATUS, "gcode_button chamber_door": {"state": "RELEASED"}}, 123)["door"] == 0
             assert make_sample({**STATUS, "gcode_button chamber_door": {"state": "UNKNOWN"}}, 123)["door"] is None
             assert make_sample({key: value for key, value in STATUS.items() if key != "gcode_button chamber_door"}, 123)["door"] is None
@@ -147,7 +166,7 @@ def main() -> None:
         server.shutdown()
         server.server_close()
 
-    print("Recorder smoke test verified optional chamber-door status, Peltier telemetry, SGP40 tags, and atomic output.")
+    print("Recorder smoke test verified 0.5s door polling and durable OPEN/CLOSED events, plus sensor telemetry and atomic output.")
 
 
 if __name__ == "__main__":
