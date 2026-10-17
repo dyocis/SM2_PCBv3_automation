@@ -107,6 +107,7 @@ def main() -> None:
                 process.wait(timeout=5)
 
             assert payload["samples"], "Recorder wrote no samples"
+            assert payload["door_events"] == [], "New recorder must not fabricate a door transition"
             sample = payload["samples"][-1]
             assert sample["rpm"] == 9640
             assert sample["pi"] == 1008.42
