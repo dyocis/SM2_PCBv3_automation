@@ -572,6 +572,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop_handler)
 
     state_path = args.output.with_name("recorder_state.json")
+    fault_seen_path = args.output.with_name("peltier_fault_seen.json")
     previous = load_json(args.output, {})
     raw_samples = previous.get("samples", []) if isinstance(previous, dict) else []
     samples, removed_samples = clean_existing_history(raw_samples, args.restart_quarantine_seconds)
@@ -588,6 +589,23 @@ def main() -> int:
         key=lambda event: event["t"],
     ) if isinstance(raw_door_events, list) else []
     door_tracker = DoorEventTracker()
+    # Keep the seen-signature separately from 24h chart retention. Restarting
+    # the recorder after a long-idle Klipper fault must not re-date old data.
+    raw_fault_events = previous.get("peltier_fault_events", []) if isinstance(previous, dict) else []
+    peltier_fault_events = [
+        event for event in raw_fault_events
+        if isinstance(event, dict) and isinstance(event.get("t"), (int, float))
+        and cutoff_at_start <= event["t"] <= int(time.time() * 1000)
+        and event.get("reason") in PELTIER_FAULT_REASONS
+        and isinstance(event.get("seq"), int) and event["seq"] > 0
+    ] if isinstance(raw_fault_events, list) else []
+    fault_seen = load_json(fault_seen_path, {})
+    last_fault_signature = fault_seen.get("signature") if isinstance(fault_seen, dict) else None
+    if not isinstance(last_fault_signature, str):
+        last_fault_signature = (
+            fault_signature(peltier_fault_events[-1]) if peltier_fault_events else None
+        )
+    fault_poll_initialized = last_fault_signature is not None
     lifetime = load_json(
         state_path,
         {"installed_at": None, "fan_seconds": 0.0, "voc_exposure_index_seconds": 0.0},
@@ -600,6 +618,7 @@ def main() -> int:
     last_write_time = 0.0
     next_sample_time = time.monotonic()
     next_door_poll_time = time.monotonic()
+    next_fault_poll_time = time.monotonic()
     next_media_check = 0.0
     last_guard_reason = ""
     door_available: bool | None = None
@@ -609,7 +628,7 @@ def main() -> int:
     # keep distorting the charts while the new post-restart quarantine runs.
     startup_timestamp_ms = int(time.time() * 1000)
     try:
-        atomic_json_write(args.output, history_payload(startup_timestamp_ms, args, lifetime, samples, guard, door_events))
+        atomic_json_write(args.output, history_payload(startup_timestamp_ms, args, lifetime, samples, guard, door_events, peltier_fault_events))
         atomic_json_write(state_path, lifetime)
         if removed_samples:
             print(
@@ -637,16 +656,55 @@ def main() -> int:
                     try:
                         atomic_json_write(
                             args.output,
-                            history_payload(event_time_ms, args, lifetime, samples, guard, door_events),
+                            history_payload(event_time_ms, args, lifetime, samples, guard, door_events, peltier_fault_events),
                         )
                     except Exception as error:
                         print("Nevermore door event save failed: " + str(error), file=sys.stderr, flush=True)
             except Exception:
                 door_tracker.reset()
 
+        # Poll the frozen first-trip snapshot once per second, independently
+        # of VOC startup quarantine and the environmental sample interval.
+        # Moonraker supplies an observation timestamp; console RESPOND is
+        # independently stamped by Mainsail when Klipper detects the trip.
+        if now_monotonic >= next_fault_poll_time:
+            next_fault_poll_time = now_monotonic + PELTIER_FAULT_POLL_SECONDS
+            try:
+                fault_sm = query_peltier_fault_state(args.moonraker)
+                detected_ms = int(time.time() * 1000)
+                event = extract_peltier_fault_event(fault_sm, detected_ms)
+                signature = fault_signature(event) if event else None
+                if not fault_poll_initialized:
+                    # First successful poll is a baseline: a trip held by
+                    # Klipper before recorder installation has unknown time.
+                    fault_poll_initialized = True
+                    last_fault_signature = signature
+                    if signature:
+                        atomic_json_write(fault_seen_path, {"signature": signature})
+                elif signature and signature != last_fault_signature:
+                    cutoff = detected_ms - int(args.retention_hours * 3_600_000)
+                    pending = [item for item in peltier_fault_events if item["t"] >= cutoff]
+                    pending.append(event)
+                    atomic_json_write(
+                        args.output,
+                        history_payload(detected_ms, args, lifetime, samples, guard, door_events, pending),
+                    )
+                    peltier_fault_events = pending
+                    last_fault_signature = signature
+                    try:
+                        atomic_json_write(fault_seen_path, {"signature": signature})
+                    except Exception as error:
+                        print("Nevermore fault signature save failed: " + str(error), file=sys.stderr, flush=True)
+                    print("Nevermore Peltier trip captured: " + event["reason"], flush=True)
+            except Exception as error:
+                # Do not disable filtration or recorder sampling on logging errors.
+                if int(now_monotonic) % 60 == 0:
+                    print("Nevermore fault snapshot query/save failed: " + str(error), file=sys.stderr, flush=True)
+
         if now_monotonic < next_sample_time:
             until_door = (next_door_poll_time - now_monotonic) if door_available is True else 0.5
-            time.sleep(max(0.01, min(0.25, next_sample_time - now_monotonic, until_door)))
+            until_fault = next_fault_poll_time - now_monotonic
+            time.sleep(max(0.01, min(0.25, next_sample_time - now_monotonic, until_door, until_fault)))
             continue
 
         next_sample_time = now_monotonic + max(0.25, args.sample_seconds)
@@ -725,10 +783,11 @@ def main() -> int:
         cutoff = timestamp_ms - int(args.retention_hours * 3_600_000)
         samples = [point for point in samples if number(point.get("t")) and point["t"] >= cutoff]
         door_events = [event for event in door_events if event["t"] >= cutoff]
+        peltier_fault_events = [event for event in peltier_fault_events if event["t"] >= cutoff]
 
         if now_monotonic - last_write_time >= max(args.sample_seconds, args.write_seconds):
             last_write_time = now_monotonic
-            payload = history_payload(timestamp_ms, args, lifetime, samples, guard, door_events)
+            payload = history_payload(timestamp_ms, args, lifetime, samples, guard, door_events, peltier_fault_events)
             try:
                 atomic_json_write(args.output, payload)
                 atomic_json_write(state_path, lifetime)
