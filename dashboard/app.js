@@ -14,6 +14,9 @@
   const HISTORY_STABLE_SAMPLES = 3;
   const MAX_CHART_GAP_MS = 35_000;
   const DOOR_EVENT_GROUP_MS = 12_000;
+  // At 10-second recorder cadence, trust a confirmed door observation for
+  // at most 20 seconds. Never stretch a state across recorder outages.
+  const DOOR_TOOLTIP_MAX_AGE_MS = 20_000;
   const OUTLET_VOC_STEP_LIMIT = 120;
   const OUTLET_VOC_INVERSION_LIMIT = 80;
   const CONTROL_UNLOCK_MS = 5 * 60 * 1_000;
@@ -881,6 +884,11 @@
       if (!normalized || normalized.t < cutoff) continue;
       normalized.src = point.src === "pi" || point.src === "browser"
         ? point.src : source;
+      // A same-millisecond browser sample must never erase the recorder's
+      // actual door state. Browser history intentionally lacks that field.
+      const existing = combined.get(normalized.t);
+      if (existing && (existing.door === 0 || existing.door === 1) &&
+          normalized.door !== 0 && normalized.door !== 1) continue;
       combined.set(normalized.t, normalized);
     }
     state.history = cleanHistorySeries([...combined.values()]);
@@ -1397,6 +1405,33 @@
     return events;
   }
 
+  function doorStateAtTime(time, samples, recordedEvents) {
+    // Browser telemetry does not poll the physical door switch. Resolve its
+    // tooltip from independent, timestamped Pi observations rather than the
+    // nearest *environmental* sample. Explicit Pi UNKNOWN breaks continuity.
+    // Never extrapolate a stale door state through a recorder outage.
+    let latest = null;
+    for (const point of samples) {
+      if (point.t > time) break;
+      if (point.door === 0 || point.door === 1) {
+        latest = { t: point.t, state: point.door };
+      } else if (point.src === "pi") {
+        latest = { t: point.t, state: null };
+      }
+    }
+    // Fast door events can establish a state between 10-second Pi samples.
+    // Do not invent OPEN/CLOSED when no recent observation exists.
+    for (const event of recordedEvents) {
+      if (event.t > time) break;
+      if (!latest || event.t >= latest.t) {
+        latest = { t: event.t, state: event.state };
+      }
+    }
+    if (!latest || latest.state === null ||
+        time - latest.t > DOOR_TOOLTIP_MAX_AGE_MS) return "UNKNOWN";
+    return latest.state === 1 ? "OPEN" : "CLOSED";
+  }
+
   function groupedDoorTransitions(events) {
     // Coalesce a run of quick reopenings into its first OPEN and last CLOSED.
     // Retain separate door-use sessions when the gap exceeds the window.
@@ -1786,7 +1821,9 @@
       return "<span><i style=\"background:" + series.color + "\"></i>" + series.label + " <strong>" + formatChartValue(series.values[index], series.axis === "voc" ? "voc" : state.historyMetric) + "</strong></span>";
     }).join("");
     const vent = nearest.vent === 1 ? "OPEN" : nearest.vent === 0 ? "CLOSED" : "UNKNOWN";
-    const door = nearest.door === 1 ? "OPEN" : nearest.door === 0 ? "CLOSED" : "UNKNOWN";
+    // Use the timestamp shown in the tooltip, not the cursor's approximate
+    // chart position, so every field describes the same sample time.
+    const door = doorStateAtTime(nearest.t, meta.samples, state.doorEvents);
     const doorEvent = meta.doorEvents?.find((item) =>
       Math.abs(item.t - targetTime) <= 8_000);
     const doorChange = doorEvent
