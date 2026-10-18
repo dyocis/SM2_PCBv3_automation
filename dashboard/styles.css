@@ -1666,6 +1666,26 @@ button {
 
 .chart-legend span { display: inline-flex; gap: 6px; align-items: center; }
 
+.fault-history {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,107,86,.30);
+  border-radius: 12px;
+  background: rgba(255,107,86,.045);
+}
+
+.fault-history[hidden] { display: none; }
+.fault-history > strong { font-size: .75rem; color: #ff927d; }
+.fault-history > p { font-size: .66rem; color: var(--muted); margin: 5px 0 8px; line-height: 1.4; }
+.fault-history-list { display: grid; gap: 5px; }
+.fault-history-list details {
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+  font-size: .7rem;
+}
+.fault-history-list summary { cursor: pointer; font-weight: 700; }
+.fault-history-list p { color: var(--muted-bright); line-height: 1.55; margin: 8px 0 4px; }
+
 .annotation-toolbar {
   display: flex;
   align-items: center;
