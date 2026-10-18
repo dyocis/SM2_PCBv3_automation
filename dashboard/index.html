@@ -272,6 +272,11 @@
           </div>
 
           <div class="chart-legend" id="chartLegend" aria-label="Chart legend"></div>
+          <section id="peltierFaultHistory" class="fault-history" hidden aria-label="Recorded Peltier thermal faults">
+            <strong>Peltier thermal fault snapshots</strong>
+            <p>Times are when the Pi recorder first observed each latched trip (typically within 1 second). The Mainsail console timestamps the original trip message.</p>
+            <div id="peltierFaultList" class="fault-history-list"></div>
+          </section>
           <div class="annotation-toolbar">
             <div>
               <strong>History events</strong>
