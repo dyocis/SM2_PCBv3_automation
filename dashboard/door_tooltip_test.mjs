@@ -17,7 +17,7 @@ const sample = (msAgo, changes = {}) => ({
 const pi = [];
 for (let seconds = 260; seconds >= 90; seconds -= 10) {
   const door = seconds === 120 || seconds === 110 ? null :
-    seconds <= 100 ? 1 : seconds <= 160 && seconds >= 170 ? 1 : 0;
+    seconds <= 100 || seconds === 170 || seconds === 160 ? 1 : 0;
   pi.push(sample(seconds * 1000, { door }));
 }
 // Two short, direct events between environmental samples; the click-through
