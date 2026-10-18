@@ -75,8 +75,7 @@ def main() -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "history.json"
             recorder = Path(__file__).with_name("nevermore_history.py")
-            process = subprocess.Popen(
-                [
+            command = [
                     sys.executable, os.fspath(recorder),
                     "--moonraker", f"http://127.0.0.1:{server.server_port}",
                     "--output", os.fspath(output),
@@ -86,7 +85,7 @@ def main() -> None:
                     "--restart-quarantine-seconds", "0",
                     "--stable-samples", "1",
                 ]
-            )
+            process = subprocess.Popen(command)
             # The recorder first writes an empty startup/quarantine snapshot.
             # Wait for telemetry, not merely file creation, before stopping it.
             payload = None
@@ -164,6 +163,21 @@ def main() -> None:
             finally:
                 process.terminate()
                 process.wait(timeout=5)
+
+            # The frozen Klipper snapshot is still present, but restarting
+            # the recorder must not fabricate a second thermal-trip event.
+            restarted = subprocess.Popen(command)
+            try:
+                time.sleep(1.8)
+                assert restarted.poll() is None, "Recorder failed after restart"
+                after_restart = json.loads(output.read_text())
+                assert len(after_restart["peltier_fault_events"]) == 1, (
+                    "Recorder restart incorrectly re-timestamped a previous fault"
+                )
+                assert after_restart["peltier_fault_events"][0]["hot"] == 72.3
+            finally:
+                restarted.terminate()
+                restarted.wait(timeout=5)
 
             assert payload["samples"], "Recorder wrote no samples"
             assert payload["door_events"] == [], "New recorder must not fabricate a door transition"
