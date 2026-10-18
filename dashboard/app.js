@@ -73,6 +73,7 @@
       "pressureIn", "pressureOut", "newMediaButton", "pressureCalibrateButton",
       "vocCalibrateButton", "calibrationNote", "recorderState", "historyChart",
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
+      "peltierFaultHistory", "peltierFaultList",
       "chartRange", "annotationOpen", "annotationDialog", "annotationForm", "annotationKind",
       "annotationTime", "annotationNote", "annotationList", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
@@ -94,6 +95,7 @@
     demoTimer: null,
     history: [],
     doorEvents: [],
+    peltierFaultEvents: [],
     annotations: [],
     historyMetric: "voc",
     historyMinutes: 60,
@@ -858,6 +860,8 @@
       // Door events are authoritative read-only recorder observations.
       // Unlike the 10-second VOC samples, they survive brief door activity.
       state.doorEvents = sanitizeDoorEvents(payload.door_events);
+      state.peltierFaultEvents = sanitizePeltierFaultEvents(payload.peltier_fault_events);
+      renderPeltierFaultList();
       state.collectorLifetime = payload.lifetime || null;
       state.recorderGuard = payload.guard || null;
       state.historySource = "pi";
@@ -891,6 +895,56 @@
       Number.isFinite(event.t) && event.t >= cutoff && event.t <= Date.now() + 60_000)
       .map((event) => ({ t: event.t, state: event.state }))
       .sort((a, b) => a.t - b.t);
+  }
+
+  function sanitizePeltierFaultEvents(items) {
+    if (!Array.isArray(items)) return [];
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    const numbers = ["hot", "cold", "hot_min", "hot_max", "cold_min",
+      "cold_max", "chamber", "fan_rpm", "fan_speed", "was_active",
+      "sensors_present", "vent_open"];
+    const reasons = ["TEMPERATURE LIMIT", "AUTO TEMPERATURE LIMIT",
+      "START TEMPERATURE LIMIT", "THERMAL FAULT"];
+    return items.filter((event) =>
+      event && Number.isFinite(event.t) && event.t >= cutoff &&
+      event.t <= Date.now() + 60_000 &&
+      Number.isInteger(event.seq) && event.seq > 0 &&
+      reasons.includes(event.reason) &&
+      numbers.every((key) => validNumber(event[key])) &&
+      ["was_active", "sensors_present", "vent_open"].every((key) =>
+        event[key] === 0 || event[key] === 1))
+      .map((event) => ({ ...Object.fromEntries(
+        ["t", "seq", "reason", ...numbers].map((key) => [key, event[key]])
+      ) }))
+      .sort((a, b) => a.t - b.t);
+  }
+
+  function renderPeltierFaultList() {
+    if (!els.peltierFaultHistory || !els.peltierFaultList) return;
+    els.peltierFaultList.replaceChildren();
+    const events = state.peltierFaultEvents.slice(-6).reverse();
+    els.peltierFaultHistory.hidden = events.length === 0;
+    for (const event of events) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = new Date(event.t).toLocaleString() +
+        " · " + event.reason;
+      const description = document.createElement("p");
+      const fmt = (value) => validNumber(value) && value >= 0
+        ? value.toFixed(1) + "°C" : "unavailable";
+      description.textContent =
+        "Hot " + fmt(event.hot) + " (limits " + fmt(event.hot_min) +
+        "–" + fmt(event.hot_max) + "); Cold " + fmt(event.cold) +
+        " (limits " + fmt(event.cold_min) + "–" + fmt(event.cold_max) +
+        "); Chamber " + fmt(event.chamber) +
+        "; Fan " + Math.round(event.fan_speed * 100) + "% / " +
+        Math.round(event.fan_rpm) + " RPM; Peltier previously " +
+        (event.was_active ? "ON" : "OFF") + "; Sensors " +
+        (event.sensors_present ? "present" : "missing") +
+        "; Exhaust " + (event.vent_open ? "OPEN" : "CLOSED") + ".";
+      details.append(summary, description);
+      els.peltierFaultList.appendChild(details);
+    }
   }
 
   function sanitizeHistoryPoint(point) {
