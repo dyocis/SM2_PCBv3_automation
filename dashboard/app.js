@@ -1429,6 +1429,16 @@
     }
     if (!latest || latest.state === null ||
         time - latest.t > DOOR_TOOLTIP_MAX_AGE_MS) return "UNKNOWN";
+    // A paired fast OPEN→CLOSED interval is deliberately debounced and
+    // grouped by the Pi recorder. It wins over any transient 10-second
+    // CLOSED sample inside that interval, but only while recent recorder
+    // evidence is available and has not explicitly become UNKNOWN.
+    for (let i = 0; i < recordedEvents.length - 1; i += 1) {
+      const first = recordedEvents[i];
+      const next = recordedEvents[i + 1];
+      if (first.state === 1 && next.state === 0 &&
+          first.t <= time && time < next.t) return "OPEN";
+    }
     return latest.state === 1 ? "OPEN" : "CLOSED";
   }
 
