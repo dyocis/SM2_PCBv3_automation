@@ -1454,6 +1454,7 @@
         ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
       }));
     const manualEvents = state.annotations.filter((item) => item.t >= start && item.t <= end);
+    const faultEvents = state.peltierFaultEvents.filter((item) => item.t >= start && item.t <= end);
     // Keep the UV thermistor on the left °C scale and the outlet VOC Index
     // on a separate right scale. Mixing both into one range hides changes.
     const primarySeries = definition.series.filter((series) => series.axis !== "voc");
@@ -1672,6 +1673,31 @@
       els.chartLegend.appendChild(item);
     }
 
+    // Thermal-trip evidence is sourced from the recorder, not inferred from
+    // temperatures on the graph. Mark it independently of other overlays.
+    if (faultEvents.length) {
+      ctx.save();
+      ctx.strokeStyle = "#ff6b56";
+      ctx.fillStyle = "#ff927d";
+      ctx.lineWidth = 2;
+      ctx.font = "bold 10px Inter, system-ui, sans-serif";
+      for (const event of faultEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillText("PELTIER TRIP", clamp(x - 35, plot.left, plot.right - 91),
+          plot.top + 58);
+      }
+      ctx.restore();
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#ff6b56"></i>Peltier thermal trip';
+      els.chartLegend.appendChild(item);
+    }
+
     if (hasCalibrationWindow) {
       const item = document.createElement("span");
       item.innerHTML = '<i style="background:#ffb64a;opacity:.45"></i>SGP40 calibration';
@@ -1679,7 +1705,7 @@
     }
 
     canvas._chartMeta = { samples, plot, start, end, definition, outputEvents,
-      doorEvents, manualEvents, outputKey, vocMax };
+      doorEvents, manualEvents, faultEvents, outputKey, vocMax };
   }
 
   function chartDefinition(metric, samples) {
@@ -1771,6 +1797,16 @@
     const manualRows = manualNear.map((item) =>
       '<span class="tooltip-state">Manual event <strong>' +
       escapeHtml(item.label) + "</strong></span>").join("");
+    const faultNear = (meta.faultEvents || []).find((item) =>
+      Math.abs(x - (meta.plot.left + (item.t - meta.start) /
+        (meta.end - meta.start) * (meta.plot.right - meta.plot.left))) <= 12);
+    const faultRow = faultNear
+      ? '<span class="tooltip-state">PELTIER TRIP <strong>' +
+        escapeHtml(faultNear.reason) + '</strong></span>' +
+        '<span class="tooltip-state">At trip <strong>Hot ' +
+        faultNear.hot.toFixed(1) + '°C / Cold ' + faultNear.cold.toFixed(1) +
+        '°C / Fan ' + Math.round(faultNear.fan_rpm) + ' RPM</strong></span>'
+      : "";
     const calibration = nearest.cal === 1
       ? '<span class="tooltip-state">SGP40 calibration <strong>ACTIVE</strong></span>'
       : "";
@@ -1788,7 +1824,7 @@
         (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
       : "";
     els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" +
-      rows + outputState + transition + doorChange + manualRows +
+      rows + outputState + transition + doorChange + manualRows + faultRow +
       '<span class="tooltip-state">Chamber door <strong>' + door + '</strong></span>' +
       "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
     els.chartTooltip.hidden = false;
