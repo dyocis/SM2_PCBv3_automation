@@ -44,6 +44,11 @@ DEFAULT_STABLE_SAMPLES = 3
 DOOR_POLL_SECONDS = 0.5
 DOOR_SETTLE_SECONDS = 0.75
 DOOR_REOPEN_MERGE_SECONDS = 12.0
+PELTIER_FAULT_POLL_SECONDS = 1.0
+PELTIER_FAULT_REASONS = {
+    "TEMPERATURE LIMIT", "AUTO TEMPERATURE LIMIT",
+    "START TEMPERATURE LIMIT", "THERMAL FAULT",
+}
 OUTLET_VOC_STEP_LIMIT = 120.0
 OUTLET_VOC_INVERSION_LIMIT = 80.0
 
@@ -79,6 +84,15 @@ def query_door_state(endpoint: str) -> int | None:
     )
     raw = payload.get("result", {}).get("status", {}).get("gcode_button chamber_door", {}).get("state")
     return 1 if raw == "PRESSED" else 0 if raw == "RELEASED" else None
+
+
+def query_peltier_fault_state(endpoint: str) -> dict[str, Any]:
+    """Read only Klipper macro variables; never issue printer commands."""
+    payload = request_json(
+        endpoint.rstrip("/") + "/printer/objects/query",
+        {"objects": {"gcode_macro SM_LED_STATE": None}},
+    )
+    return payload.get("result", {}).get("status", {}).get("gcode_macro SM_LED_STATE", {})
 
 
 def query_status(endpoint: str, include_door: bool = False) -> dict[str, Any]:
@@ -126,6 +140,54 @@ def optional_thermistor(value: Any) -> float | None:
     """Retain plausible optional readings without blocking base VOC history."""
     result = number(value)
     return result if result is not None and 0 <= result <= 110 else None
+
+
+def extract_peltier_fault_event(sm: dict[str, Any], timestamp_ms: int) -> dict[str, Any] | None:
+    """Snapshot already frozen by the Klipper trip macro; t is observation time.
+
+    The macro updates the sequence LAST, so a fast query never returns a
+    partial snapshot. A missing/legacy macro reports sequence zero.
+    """
+    if not isinstance(sm, dict):
+        return None
+    seq = number(sm.get("peltier_fault_seq"))
+    if seq is None or seq < 1 or seq > 1_000_000_000 or not seq.is_integer():
+        return None
+    reason = sm.get("peltier_fault_reason")
+    if reason not in PELTIER_FAULT_REASONS:
+        return None
+    mapping = {
+        "hot": "peltier_fault_hot",
+        "cold": "peltier_fault_cold",
+        "hot_min": "peltier_fault_hot_min",
+        "hot_max": "peltier_fault_hot_max",
+        "cold_min": "peltier_fault_cold_min",
+        "cold_max": "peltier_fault_cold_max",
+        "chamber": "peltier_fault_chamber",
+        "fan_rpm": "peltier_fault_fan_rpm",
+        "fan_speed": "peltier_fault_fan_speed",
+        "was_active": "peltier_fault_was_active",
+        "sensors_present": "peltier_fault_sensors_present",
+        "vent_open": "peltier_fault_vent_open",
+    }
+    values = {key: number(sm.get(source)) for key, source in mapping.items()}
+    if any(value is None for value in values.values()):
+        return None
+    if not all(values[key] in (0, 1) for key in ("was_active", "sensors_present", "vent_open")):
+        return None
+    if values["fan_rpm"] < 0 or values["fan_rpm"] > 30_000:
+        return None
+    if values["fan_speed"] < 0 or values["fan_speed"] > 1.05:
+        return None
+    if any(abs(values[key]) > 500 for key in
+           ("hot", "cold", "hot_min", "hot_max", "cold_min", "cold_max", "chamber")):
+        return None
+    return {"t": timestamp_ms, "seq": int(seq), "reason": reason, **values}
+
+
+def fault_signature(event: dict[str, Any]) -> str:
+    return json.dumps({key: value for key, value in event.items() if key != "t"},
+                      sort_keys=True, separators=(",", ":"))
 
 
 def make_sample(status: dict[str, Any], timestamp_ms: int) -> dict[str, Any]:
@@ -476,6 +538,7 @@ def history_payload(
     samples: list[dict[str, Any]],
     guard: RestartGuard,
     door_events: list[dict[str, Any]] | None = None,
+    peltier_fault_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema": 2,
@@ -486,6 +549,7 @@ def history_payload(
         "guard": guard.metadata(),
         "samples": samples,
         "door_events": door_events if door_events is not None else [],
+        "peltier_fault_events": peltier_fault_events if peltier_fault_events is not None else [],
     }
 
 
