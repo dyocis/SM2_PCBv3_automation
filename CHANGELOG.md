@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- First-trip-only Peltier thermal fault evidence in the Mainsail console, including hot/cold readings and limits, chamber temperature, fan RPM/speed, output/vent state, reason, and last-trip `NEVERMORE_STATUS`; thermal cutoff, 60-second cooldown, and reset interlocks are unchanged.
+- Read-only per-second fault snapshot observation, 24-hour durable `peltier_fault_events` history, restart-safe deduplication, chart markers, and expandable thermal fault details without changing normal 10-second VOC/door sampling.
 - Compact tabbed dashboard with Live, History, Media, and guarded Controls views.
 - UV LED and Peltier thermal-history graphs now annotate recorded ON/OFF output transitions and active windows without inventing events across recorder gaps or restarts.
 - Optional auto-detected `gcode_button chamber_door` state recording and gap-safe chamber-door OPEN/CLOSED markers on all history graphs, without altering printer door macros.
