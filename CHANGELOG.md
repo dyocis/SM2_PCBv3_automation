@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Resolve chamber-door states in history tooltips from recent authoritative Pi observations and grouped door events instead of alternating between recorder `CLOSED` and browser-only `UNKNOWN` at nearly identical timestamps; preserve true unknown/outage states.
 - Door history no longer loses OPEN/CLOSED markers when browser snapshots without door telemetry interleave with Pi recorder samples.
 - Record and immediately persist chamber-door events independently at 0.5-second intervals with a 0.75-second settle check and 12-second close/reopen grouping; preserve 24-hour events through recorder restarts, while leaving 10-second VOC sampling and printer door macros unchanged.
 

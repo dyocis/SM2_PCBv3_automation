@@ -114,5 +114,13 @@ canvas.dispatchEvent(new window.MouseEvent("pointermove", {
 }));
 assert(window.document.getElementById("chartTooltip").textContent.includes("Chamber door transition"),
   "Fast recorder door event was not visible in the tooltip");
+// Pi environmental samples include a brief CLOSED reading at -160s, but the
+// independent recorder grouped the rapid close/reopen as one OPEN interval.
+// Hovering an interleaved browser sample must not contradict that interval.
+canvas.dispatchEvent(new window.MouseEvent("pointermove", {
+  bubbles: true, clientX: xAt(now - 155000), clientY: 150,
+}));
+assert(window.document.getElementById("chartTooltip").textContent.includes("Chamber door OPEN"),
+  "Tooltip contradicted the recorder's grouped door-open interval");
 dom.window.close();
 console.log("Recorder fast-event authority, interleaved browser samples, and tooltip verified.");
