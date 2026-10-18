@@ -75,8 +75,7 @@ def main() -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "history.json"
             recorder = Path(__file__).with_name("nevermore_history.py")
-            process = subprocess.Popen(
-                [
+            command = [
                     sys.executable, os.fspath(recorder),
                     "--moonraker", f"http://127.0.0.1:{server.server_port}",
                     "--output", os.fspath(output),
@@ -86,7 +85,7 @@ def main() -> None:
                     "--restart-quarantine-seconds", "0",
                     "--stable-samples", "1",
                 ]
-            )
+            process = subprocess.Popen(command)
             # The recorder first writes an empty startup/quarantine snapshot.
             # Wait for telemetry, not merely file creation, before stopping it.
             payload = None
@@ -121,9 +120,64 @@ def main() -> None:
                     time.sleep(0.1)
                 assert captured is not None, "Recorder missed stable short door OPEN/CLOSED events"
                 assert [event["state"] for event in captured] == [1, 0], captured
+
+                # The first completed trip is frozen in Klipper macro state.
+                # The recorder must persist its evidence immediately, while
+                # normal VOC sampling continues and the door stream remains.
+                STATUS["gcode_macro SM_LED_STATE"].update({
+                    "peltier_fault_seq": 1,
+                    "peltier_fault_reason": "TEMPERATURE LIMIT",
+                    "peltier_fault_hot": 72.3,
+                    "peltier_fault_cold": 41.7,
+                    "peltier_fault_hot_min": 0,
+                    "peltier_fault_hot_max": 70,
+                    "peltier_fault_cold_min": 0,
+                    "peltier_fault_cold_max": 70,
+                    "peltier_fault_chamber": 52.1,
+                    "peltier_fault_fan_rpm": 9612,
+                    "peltier_fault_fan_speed": 1.0,
+                    "peltier_fault_was_active": 1,
+                    "peltier_fault_sensors_present": 1,
+                    "peltier_fault_vent_open": 0,
+                })
+                fault_evidence = None
+                deadline = time.monotonic() + 4
+                while time.monotonic() < deadline:
+                    candidate = json.loads(output.read_text())
+                    if candidate.get("peltier_fault_events"):
+                        fault_evidence = candidate["peltier_fault_events"]
+                        break
+                    if process.poll() is not None:
+                        raise AssertionError(f"Recorder exited before fault snapshot: {process.returncode}")
+                    time.sleep(0.1)
+                assert fault_evidence is not None, "Recorder did not persist a Peltier snapshot"
+                assert len(fault_evidence) == 1
+                assert fault_evidence[0]["hot"] == 72.3
+                assert fault_evidence[0]["cold"] == 41.7
+                assert fault_evidence[0]["fan_rpm"] == 9612
+                assert fault_evidence[0]["reason"] == "TEMPERATURE LIMIT"
+                time.sleep(1.2)
+                unchanged = json.loads(output.read_text())
+                assert len(unchanged["peltier_fault_events"]) == 1, "Snapshot duplicated during polling"
+                assert len(unchanged["door_events"]) == 2, "Fault event damaged existing door history"
             finally:
                 process.terminate()
                 process.wait(timeout=5)
+
+            # The frozen Klipper snapshot is still present, but restarting
+            # the recorder must not fabricate a second thermal-trip event.
+            restarted = subprocess.Popen(command)
+            try:
+                time.sleep(1.8)
+                assert restarted.poll() is None, "Recorder failed after restart"
+                after_restart = json.loads(output.read_text())
+                assert len(after_restart["peltier_fault_events"]) == 1, (
+                    "Recorder restart incorrectly re-timestamped a previous fault"
+                )
+                assert after_restart["peltier_fault_events"][0]["hot"] == 72.3
+            finally:
+                restarted.terminate()
+                restarted.wait(timeout=5)
 
             assert payload["samples"], "Recorder wrote no samples"
             assert payload["door_events"] == [], "New recorder must not fabricate a door transition"

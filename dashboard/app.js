@@ -73,6 +73,7 @@
       "pressureIn", "pressureOut", "newMediaButton", "pressureCalibrateButton",
       "vocCalibrateButton", "calibrationNote", "recorderState", "historyChart",
       "chartEmpty", "chartTooltip", "chartLegend", "historyNote", "chartMetric",
+      "peltierFaultHistory", "peltierFaultList",
       "chartRange", "annotationOpen", "annotationDialog", "annotationForm", "annotationKind",
       "annotationTime", "annotationNote", "annotationList", "controlStatus", "controlLockButton", "controlFanVisual",
       "controlFanPercent", "controlFanRpm", "uvControlState", "peltierControlState", "ventControlState",
@@ -94,6 +95,7 @@
     demoTimer: null,
     history: [],
     doorEvents: [],
+    peltierFaultEvents: [],
     annotations: [],
     historyMetric: "voc",
     historyMinutes: 60,
@@ -858,6 +860,8 @@
       // Door events are authoritative read-only recorder observations.
       // Unlike the 10-second VOC samples, they survive brief door activity.
       state.doorEvents = sanitizeDoorEvents(payload.door_events);
+      state.peltierFaultEvents = sanitizePeltierFaultEvents(payload.peltier_fault_events);
+      renderPeltierFaultList();
       state.collectorLifetime = payload.lifetime || null;
       state.recorderGuard = payload.guard || null;
       state.historySource = "pi";
@@ -891,6 +895,56 @@
       Number.isFinite(event.t) && event.t >= cutoff && event.t <= Date.now() + 60_000)
       .map((event) => ({ t: event.t, state: event.state }))
       .sort((a, b) => a.t - b.t);
+  }
+
+  function sanitizePeltierFaultEvents(items) {
+    if (!Array.isArray(items)) return [];
+    const cutoff = Date.now() - HISTORY_RETENTION_MS;
+    const numbers = ["hot", "cold", "hot_min", "hot_max", "cold_min",
+      "cold_max", "chamber", "fan_rpm", "fan_speed", "was_active",
+      "sensors_present", "vent_open"];
+    const reasons = ["TEMPERATURE LIMIT", "AUTO TEMPERATURE LIMIT",
+      "START TEMPERATURE LIMIT", "THERMAL FAULT"];
+    return items.filter((event) =>
+      event && Number.isFinite(event.t) && event.t >= cutoff &&
+      event.t <= Date.now() + 60_000 &&
+      Number.isInteger(event.seq) && event.seq > 0 &&
+      reasons.includes(event.reason) &&
+      numbers.every((key) => validNumber(event[key])) &&
+      ["was_active", "sensors_present", "vent_open"].every((key) =>
+        event[key] === 0 || event[key] === 1))
+      .map((event) => ({ ...Object.fromEntries(
+        ["t", "seq", "reason", ...numbers].map((key) => [key, event[key]])
+      ) }))
+      .sort((a, b) => a.t - b.t);
+  }
+
+  function renderPeltierFaultList() {
+    if (!els.peltierFaultHistory || !els.peltierFaultList) return;
+    els.peltierFaultList.replaceChildren();
+    const events = state.peltierFaultEvents.slice(-6).reverse();
+    els.peltierFaultHistory.hidden = events.length === 0;
+    for (const event of events) {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = new Date(event.t).toLocaleString() +
+        " · " + event.reason;
+      const description = document.createElement("p");
+      const fmt = (value) => validNumber(value) && value >= 0
+        ? value.toFixed(1) + "°C" : "unavailable";
+      description.textContent =
+        "Hot " + fmt(event.hot) + " (limits " + fmt(event.hot_min) +
+        "–" + fmt(event.hot_max) + "); Cold " + fmt(event.cold) +
+        " (limits " + fmt(event.cold_min) + "–" + fmt(event.cold_max) +
+        "); Chamber " + fmt(event.chamber) +
+        "; Fan " + Math.round(event.fan_speed * 100) + "% / " +
+        Math.round(event.fan_rpm) + " RPM; Peltier previously " +
+        (event.was_active ? "ON" : "OFF") + "; Sensors " +
+        (event.sensors_present ? "present" : "missing") +
+        "; Exhaust " + (event.vent_open ? "OPEN" : "CLOSED") + ".";
+      details.append(summary, description);
+      els.peltierFaultList.appendChild(details);
+    }
   }
 
   function sanitizeHistoryPoint(point) {
@@ -1400,6 +1454,7 @@
         ...event, label: event.state === 1 ? "CHAMBER OPEN" : "CHAMBER CLOSED",
       }));
     const manualEvents = state.annotations.filter((item) => item.t >= start && item.t <= end);
+    const faultEvents = state.peltierFaultEvents.filter((item) => item.t >= start && item.t <= end);
     // Keep the UV thermistor on the left °C scale and the outlet VOC Index
     // on a separate right scale. Mixing both into one range hides changes.
     const primarySeries = definition.series.filter((series) => series.axis !== "voc");
@@ -1618,6 +1673,31 @@
       els.chartLegend.appendChild(item);
     }
 
+    // Thermal-trip evidence is sourced from the recorder, not inferred from
+    // temperatures on the graph. Mark it independently of other overlays.
+    if (faultEvents.length) {
+      ctx.save();
+      ctx.strokeStyle = "#ff6b56";
+      ctx.fillStyle = "#ff927d";
+      ctx.lineWidth = 2;
+      ctx.font = "bold 10px Inter, system-ui, sans-serif";
+      for (const event of faultEvents) {
+        const x = clamp(xFor(event.t), plot.left, plot.right);
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x, plot.top);
+        ctx.lineTo(x, plot.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillText("PELTIER TRIP", clamp(x - 35, plot.left, plot.right - 91),
+          plot.top + 58);
+      }
+      ctx.restore();
+      const item = document.createElement("span");
+      item.innerHTML = '<i style="background:#ff6b56"></i>Peltier thermal trip';
+      els.chartLegend.appendChild(item);
+    }
+
     if (hasCalibrationWindow) {
       const item = document.createElement("span");
       item.innerHTML = '<i style="background:#ffb64a;opacity:.45"></i>SGP40 calibration';
@@ -1625,7 +1705,7 @@
     }
 
     canvas._chartMeta = { samples, plot, start, end, definition, outputEvents,
-      doorEvents, manualEvents, outputKey, vocMax };
+      doorEvents, manualEvents, faultEvents, outputKey, vocMax };
   }
 
   function chartDefinition(metric, samples) {
@@ -1717,6 +1797,16 @@
     const manualRows = manualNear.map((item) =>
       '<span class="tooltip-state">Manual event <strong>' +
       escapeHtml(item.label) + "</strong></span>").join("");
+    const faultNear = (meta.faultEvents || []).find((item) =>
+      Math.abs(x - (meta.plot.left + (item.t - meta.start) /
+        (meta.end - meta.start) * (meta.plot.right - meta.plot.left))) <= 12);
+    const faultRow = faultNear
+      ? '<span class="tooltip-state">PELTIER TRIP <strong>' +
+        escapeHtml(faultNear.reason) + '</strong></span>' +
+        '<span class="tooltip-state">At trip <strong>Hot ' +
+        faultNear.hot.toFixed(1) + '°C / Cold ' + faultNear.cold.toFixed(1) +
+        '°C / Fan ' + Math.round(faultNear.fan_rpm) + ' RPM</strong></span>'
+      : "";
     const calibration = nearest.cal === 1
       ? '<span class="tooltip-state">SGP40 calibration <strong>ACTIVE</strong></span>'
       : "";
@@ -1734,7 +1824,7 @@
         (nearest[outputKey] === 1 ? "ON" : "OFF") + "</strong></span>"
       : "";
     els.chartTooltip.innerHTML = "<time>" + new Date(nearest.t).toLocaleTimeString() + "</time>" +
-      rows + outputState + transition + doorChange + manualRows +
+      rows + outputState + transition + doorChange + manualRows + faultRow +
       '<span class="tooltip-state">Chamber door <strong>' + door + '</strong></span>' +
       "<span class=\"tooltip-state\">Exhaust vent <strong>" + vent + "</strong></span>" + calibration + revision;
     els.chartTooltip.hidden = false;

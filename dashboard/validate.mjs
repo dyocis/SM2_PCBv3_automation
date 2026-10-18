@@ -116,6 +116,15 @@ assert(recorder.includes('"door_events": door_events'), "Persistent door events 
 assert(recorder.includes("Nevermore door event save failed:"), "Door events lack immediate write/error handling");
 assert(recorder.includes('"door": door_open'), "Chamber-door state missing from recorder samples");
 assert(html.includes('id="annotationForm"'), "Manual annotation dialog missing");
+assert(html.includes('id="peltierFaultHistory"'), "Peltier fault evidence panel missing");
+assert(app.includes('sanitizePeltierFaultEvents(payload.peltier_fault_events)'),
+  "Peltier fault history is not loaded from the recorder");
+assert(recorder.includes("extract_peltier_fault_event"),
+  "Recorder cannot read frozen thermal-trip snapshots");
+assert(recorder.includes("PELTIER_FAULT_POLL_SECONDS"),
+  "Thermal fault observation has no independent polling schedule");
+assert(recorder.includes('"peltier_fault_events": peltier_fault_events'),
+  "Recorder history does not persist Peltier faults");
 assert(app.includes('label: "VOC outlet (index)"') && app.includes('axis: "voc"'),
   "UV history graph is missing outlet VOC with its separate scale");
 assert(app.includes("yForVoc"), "UV outlet VOC history is not drawn against an independent scale");

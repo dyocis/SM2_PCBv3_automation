@@ -28,6 +28,7 @@ def make_printer(installed=True, enabled=True, hot=45, cold=30, active=False,
     sm = dict(uv=0, uv_thermal_fault=0, uv_cooldown_active=0,
               peltier=int(active), peltier_pending_on=int(pending),
               peltier_cooldown_active=int(cooldown), peltier_thermal_fault=0,
+              peltier_fault_seq=0,
               fault=0, vent_open=0, vent_pending_open=0, vent_closed_ready=1,
               sgp40_calibration_active=0, fan_ready=1)
     settings = dict(peltier_thermal_enabled=int(enabled),
@@ -39,6 +40,7 @@ def make_printer(installed=True, enabled=True, hot=45, cold=30, active=False,
         "gcode_macro SM_LED_STATE": sm, "gcode_macro SM2_SETTINGS": settings,
         "output_pin peltier": {}, "servo SM_Vent": {},
         "fan_generic Filter": dict(speed=1.0, rpm=9600),
+        "temperature_sensor BME_IN": dict(temperature=53),
         "temperature_sensor _SM_PCB": dict(temperature=35),
         "temperature_sensor _SM_MCU": dict(temperature=40),
     }
@@ -119,12 +121,42 @@ class PeltierTests(unittest.TestCase):
             self.assertIn(expected, output)
         self.assertNotIn("VARIABLE=fault VALUE=1", output)
 
+    def test_first_trip_logs_pre_shutdown_evidence_once(self):
+        p = make_printer(active=True, hot=72, cold=30, hot_max=70)
+        output = rendered("NEVERMORE_PELTIER_THERMAL_TRIP", p,
+                          REASON="TEMPERATURE LIMIT")
+        self.assertIn("VARIABLE=peltier_fault_reason VALUE='\"TEMPERATURE LIMIT\"'", output)
+        self.assertIn("VARIABLE=peltier_fault_hot VALUE=72", output)
+        self.assertIn("VARIABLE=peltier_fault_cold VALUE=30", output)
+        self.assertIn("VARIABLE=peltier_fault_hot_max VALUE=70", output)
+        self.assertIn("VARIABLE=peltier_fault_fan_rpm VALUE=9600", output)
+        self.assertIn("VARIABLE=peltier_fault_was_active VALUE=1", output)
+        self.assertIn("VARIABLE=peltier_fault_seq VALUE=1", output)
+        self.assertIn("Peltier trip #1: TEMPERATURE LIMIT", output)
+        self.assertLess(output.index("SET_PIN PIN=peltier VALUE=0"),
+                        output.index("VARIABLE=peltier_fault_hot"))
+        self.assertLess(output.index("VARIABLE=peltier_fault_fan_rpm"),
+                        output.index("VARIABLE=peltier_fault_seq"))
+        self.assertNotIn("VARIABLE=fault VALUE=1", output)
+
+        # A second safety/AUTO detection cannot destroy the first snapshot.
+        p["gcode_macro SM_LED_STATE"]["peltier_thermal_fault"] = 1
+        p["gcode_macro SM_LED_STATE"]["peltier_fault_seq"] = 1
+        duplicate = rendered("NEVERMORE_PELTIER_THERMAL_TRIP", p,
+                             REASON="AUTO TEMPERATURE LIMIT")
+        self.assertIn("SET_PIN PIN=peltier VALUE=0", duplicate)
+        self.assertNotIn("VARIABLE=peltier_fault_reason", duplicate)
+        self.assertNotIn("VARIABLE=peltier_fault_seq", duplicate)
+        self.assertNotIn("Peltier trip #", duplicate)
+
     def test_reset_blocked_until_cooldown_complete(self):
         result = rendered("NEVERMORE_PELTIER_THERMAL_RESET",
                           make_printer(cooldown=True))
         self.assertNotIn("VARIABLE=peltier_thermal_fault VALUE=0", result)
         result = rendered("NEVERMORE_PELTIER_THERMAL_RESET", make_printer())
         self.assertIn("VARIABLE=peltier_thermal_fault VALUE=0", result)
+        self.assertNotIn("VARIABLE=peltier_fault_seq", result)
+        self.assertNotIn("VARIABLE=peltier_fault_reason", result)
 
 
 if __name__ == "__main__":
