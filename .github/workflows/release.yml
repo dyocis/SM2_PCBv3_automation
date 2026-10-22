@@ -38,6 +38,7 @@ jobs:
           python3 scripts/test_peltier_thermal.py
           python3 scripts/test_temperature_auto.py
           python3 scripts/test_uv_thermal.py
+          python3 scripts/test_idle_timeout.py
 
       - name: Build release archive
         env:

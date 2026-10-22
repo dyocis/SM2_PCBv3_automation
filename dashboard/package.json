@@ -1,6 +1,6 @@
 {
   "name": "sm2-pcbv3-dashboard",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Compact Moonraker control, history, and media-health console for Nevermore StealthMax V2 with PCB v3",
   "scripts": {
