@@ -85,7 +85,7 @@ def printer_state(
         "print_stats": dict(total_duration=120),
     }
     if uv_installed:
-        data["output_pin uv"] = {}
+        data["output_pin uv"] = dict(value=1.0 if uv_active else 0.0)
     if sensor:
         data["temperature_sensor SM_UV_LEDs"] = dict(temperature=led_temp)
     if peltier:
@@ -181,7 +181,12 @@ class UVThermalTests(unittest.TestCase):
         self.assertIn("VARIABLE=uv_cooldown_active VALUE=1", out)
         self.assertIn("DURATION=60", out)
         out = rendered("NEVERMORE_FILTER", printer_state(cooldown=True), SPEED=0)
-        self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=1", out)
+        self.assertNotIn("SET_FAN_SPEED", out)
+        self.assertIn("VARIABLE=last_filter_speed VALUE=1.0", out)
+        p = printer_state(cooldown=True)
+        p["fan_generic Filter"]["speed"] = 0
+        self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=1",
+                      rendered("NEVERMORE_FILTER", p, SPEED=0))
 
     def test_cooldown_does_not_force_fan_off(self):
         out = rendered("NEVERMORE_UV_COOLDOWN_COMPLETE", printer_state(cooldown=True))

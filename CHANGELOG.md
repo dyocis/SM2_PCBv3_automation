@@ -6,7 +6,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-> Planned next version: **v0.3.0** (not tagged or published yet). The Peltier auto-cooling and thermistor thermal-limit features remain **disabled by default**.
+## [0.4.0] - 2026-10-22
+
+This release includes all changes merged into main since v0.3.0. Peltier auto-cooling and thermistor thermal-limit features remain disabled by default.
+
+### Idle-timeout fix
+
+- Stop sending unchanged filter and UV output commands every 15 seconds. These commands could prevent Klipper heater/motor idle shutdown indefinitely, even with both outputs off. Compare actual outputs before scheduling commands; retain polling, airflow interlocks, calibration guards, cooldowns, and unconditional emergency shutdown.
+- Regression tests cover repeated idle polls, output transitions, stale cached requests, optional UV absence, calibration guards, and emergency shutdown. The equivalent guards passed an attended 60-second idle timeout check on a Voron 300 with Isik PCB v3; automatic control stayed enabled and the normal 1800-second timeout was restored. This does not claim a new physical fault-injection campaign.
+
+### Updating from v0.3.0
+
+- Refresh Moonraker updates and update SM2_PCBv3_automation while idle, then restart Klipper if the updater has not already done so. Restart nevermore-history.service and hard-refresh the dashboard to load recorder and history improvements. Rerun the installer only if the existing installation lacks the recorder/service integration described below.
+- Local hardware settings, saved calibration, and configured idle timeout are preserved. UV thermistor protection remains opt-in; review its setup instructions before enabling it.
+- If a temporary idle_timeout_fix.cfg override was installed, remove its include after updating to v0.4.0, then restart while idle. Retain it on older unpatched checkouts.
+- Rollback to v0.3.0 restores the idle-timeout defect. Keep a configuration backup before upgrading.
+- Optional UV thermistor telemetry, prestart temperature checks, latched active-output thermal shutdown, guarded reset, and fan cooldown are now included (issue #8).
+
 
 ### Fixed
 
@@ -60,7 +76,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Peltier thermal enforcement stays disabled until valid, hardware-specific limits are configured; the sample 60°C limits are **not** rated for high-temperature chambers.
 - Temperature-triggered starts are inhibited before energizing when protection is enabled but sensors, bounds, or current temperatures are invalid. Only faults during active Peltier operation are latched.
 - Filtration remains available through a Peltier-only temperature fault; fan cooling is retained.
-- UV LED thermistor monitoring and UV-only protection are not included in this candidate (tracked separately in issue #8).
+- UV LED thermistor monitoring and UV-only protection are opt-in; existing local files remain unchanged.
 
 ## [0.2.1]
 
@@ -93,7 +109,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - This release assumes the Peltier cooler, UV LEDs, and exhaust servo are installed. Users without those optional add-ons should not install `v0.1.0`; this limitation is removed in `v0.2.0`.
 
-[Unreleased]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.3.0...v0.4.0
 [0.2.1]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dyocis/SM2_PCBv3_automation/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dyocis/SM2_PCBv3_automation/releases/tag/v0.1.0

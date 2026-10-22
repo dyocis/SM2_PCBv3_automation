@@ -399,7 +399,13 @@ class PeltierAutoTests(unittest.TestCase):
         for change in ({"active": 1}, {"pending": 1}, {"cooldown": 1}):
             with self.subTest(change=change):
                 out = render("NEVERMORE_FILTER", build(**change), SPEED=0)
-                self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=1.0", out)
+                # Already at full speed: retain airflow without waking idle.
+                self.assertNotIn("SET_FAN_SPEED", out)
+                self.assertIn("VARIABLE=last_filter_speed VALUE=1.0", out)
+                p = build(**change)
+                p["fan_generic Filter"]["speed"] = 0
+                self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=1.0",
+                              render("NEVERMORE_FILTER", p, SPEED=0))
         out = render("NEVERMORE_FILTER", build(active=0, pending=0, cooldown=0), SPEED=0)
         self.assertIn("SET_FAN_SPEED FAN=Filter SPEED=0.0", out)
 

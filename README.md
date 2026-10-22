@@ -1,5 +1,7 @@
 # SM2 PCB v3 automation
 
+**v0.4.0 fixes a Klipper idle-timeout defect and includes all changes merged since v0.3.0.** Previous versions repeatedly sent unchanged fan/UV commands, which could prevent idle shutdown indefinitely. Update through Moonraker while idle and restart Klipper; restart the history recorder and hard-refresh the dashboard for history improvements. Local settings and idle timeout values are preserved. See [release and upgrade notes](CHANGELOG.md#040---2026-10-22).
+
 Klipper automation and a live Moonraker dashboard for the Nevermore StealthMax V2 using Isik's Tech PCB v3, two BME280 + SGP40 sensor modules, a tachometer fan, and addressable status LEDs. UV lights, the exhaust vent servo, and Peltier cooling are optional and selected during installation.
 
 > [!IMPORTANT]
@@ -134,7 +136,7 @@ Unselected hardware is not defined in Klipper. Its macros become safe no-ops, au
 > [!WARNING]
 > Peltier support is an advanced beta feature. Optional hot-side and cold-side temperature telemetry is available when Klipper sensors named `SM_Peltier_Hot_Side` and `SM_Peltier_Cold_Side` are configured. Both readings are recorded continuously, including while the Peltier is off. Temperature-limit **enforcement is disabled by default**, and no assumed thermal limits are safe for every Peltier module or high-temperature chamber. Existing fan-RPM, vent, PCB/MCU, and cooldown interlocks remain active independently.
 
-### Optional UV LED thermistor and thermal shutdown (issue #8, unreleased)
+### Optional UV LED thermistor and thermal shutdown (issue #8, available in v0.4.0)
 
 The UV LED assembly thermistor is **optional**: filter-only builds, legacy UV installations without a thermistor, and Peltier-only setups continue to work unchanged. The implementation reads a Klipper `[temperature_sensor SM_UV_LEDs]` if already configured, independently of both Peltier sensors. Live temperature is shown in `NEVERMORE_STATUS`, the dashboard Live/Controls views, and a separate UV LED history chart (with `N/A` when missing).
 
